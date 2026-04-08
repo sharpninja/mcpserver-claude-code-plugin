@@ -1,0 +1,13 @@
+{
+  "name": "mcpserver",
+  "version": "1.0.0",
+  "description": "Connect Claude Code to McpServer for TODO management, session logging, requirements tracking, and GraphRAG knowledge graph operations with automatic workspace discovery and offline resilience.",
+  "author": {
+    "name": "Payton Byrd (The Sharp Ninja)",
+    "url": "https://github.com/sharpninja"
+  },
+  "homepage": "https://github.com/sharpninja/McpServer",
+  "repository": "https://github.com/sharpninja/mcpserver-claude-code-plugin",
+  "license": "MIT",
+  "keywords": ["mcp", "todo", "session-log", "requirements", "graphrag", "knowledge-graph", "workspace"]
+}
