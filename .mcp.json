@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcpserver": {
+      "type": "stdio",
+      "command": "mcpserver-repl",
+      "args": ["--agent-stdio"],
+      "env": {
+        "MCP_WORKSPACE_PATH": "${MCPSERVER_WORKSPACE_PATH}"
+      }
+    }
+  }
+}
