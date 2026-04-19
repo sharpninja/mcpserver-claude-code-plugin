@@ -51,31 +51,31 @@ _assert_executable() {
 
 @test "hooks.json contains SessionStart hook" {
     local json_path; json_path="$(_node_path "$SCRIPT_DIR/hooks/hooks.json")"
-    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit('SessionStart' in d ? 0 : 1);"
+    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit(d.hooks && 'SessionStart' in d.hooks ? 0 : 1);"
     [ "$status" -eq 0 ]
 }
 
 @test "hooks.json contains SessionEnd hook" {
     local json_path; json_path="$(_node_path "$SCRIPT_DIR/hooks/hooks.json")"
-    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit('SessionEnd' in d ? 0 : 1);"
+    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit(d.hooks && 'SessionEnd' in d.hooks ? 0 : 1);"
     [ "$status" -eq 0 ]
 }
 
 @test "hooks.json contains PreCompact hook" {
     local json_path; json_path="$(_node_path "$SCRIPT_DIR/hooks/hooks.json")"
-    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit('PreCompact' in d ? 0 : 1);"
+    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit(d.hooks && 'PreCompact' in d.hooks ? 0 : 1);"
     [ "$status" -eq 0 ]
 }
 
 @test "hooks.json contains PostCompact hook" {
     local json_path; json_path="$(_node_path "$SCRIPT_DIR/hooks/hooks.json")"
-    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit('PostCompact' in d ? 0 : 1);"
+    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit(d.hooks && 'PostCompact' in d.hooks ? 0 : 1);"
     [ "$status" -eq 0 ]
 }
 
 @test "hooks.json contains PostToolUse hook" {
     local json_path; json_path="$(_node_path "$SCRIPT_DIR/hooks/hooks.json")"
-    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit('PostToolUse' in d ? 0 : 1);"
+    run node -e "const d=JSON.parse(require('fs').readFileSync('${json_path}','utf8')); process.exit(d.hooks && 'PostToolUse' in d.hooks ? 0 : 1);"
     [ "$status" -eq 0 ]
 }
 
