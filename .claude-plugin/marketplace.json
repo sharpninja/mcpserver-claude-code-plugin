@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mcpserver-local",
+  "description": "Local marketplace for McpServer Claude Code plugin",
+  "owner": {
+    "name": "Payton Byrd (The Sharp Ninja)",
+    "email": "payton@paytonbyrd.com"
+  },
+  "plugins": [
+    {
+      "name": "mcpserver",
+      "description": "Connect Claude Code to McpServer for TODO management, session logging, requirements tracking, and GraphRAG",
+      "source": ".",
+      "category": "development"
+    }
+  ]
+}
