@@ -30,10 +30,16 @@ $script:ReplInvokePluginRoot = if ($env:PLUGIN_ROOT_OVERRIDE) {
 } else {
     Split-Path -Parent $PSScriptRoot
 }
-$script:ReplInvokeCacheDir = Join-Path $script:ReplInvokePluginRoot 'cache'
+
+if (-not (Get-Command Resolve-McpCacheDir -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'resolve-cache-dir.ps1')
+}
+
+# Resolved lazily so per-call context (workspace / env) governs path.
+function script:Get-ReplInvokeCacheDir { Resolve-McpCacheDir }
 
 function Get-ReplSessionMeta {
-    $f = Join-Path $script:ReplInvokeCacheDir 'session-state.yaml'
+    $f = Join-Path (Get-ReplInvokeCacheDir) 'session-state.yaml'
     if (-not (Test-Path $f)) { return $null }
     $line = Select-String -Path $f -Pattern '^sessionId:' -SimpleMatch:$false |
         Select-Object -First 1
@@ -147,7 +153,7 @@ $respLines
 
 function Update-ReplTurnCacheStatus {
     param([Parameter(Mandatory)][string]$NewStatus)
-    $turnFile = Join-Path $script:ReplInvokeCacheDir 'current-turn.yaml'
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return $false }
     $lines = Get-Content -Path $turnFile
     $updated = $lines | ForEach-Object {
@@ -159,7 +165,7 @@ function Update-ReplTurnCacheStatus {
 
 function Update-ReplTurnCacheEdits {
     param([Parameter(Mandatory)][int]$Increment)
-    $turnFile = Join-Path $script:ReplInvokeCacheDir 'current-turn.yaml'
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return $false }
     $lines = Get-Content -Path $turnFile
     $current = 0
@@ -179,7 +185,7 @@ function Update-ReplTurnCacheEdits {
 
 function Get-ReplTurnCacheField {
     param([Parameter(Mandatory)][string]$Field)
-    $turnFile = Join-Path $script:ReplInvokeCacheDir 'current-turn.yaml'
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return '' }
     $line = Select-String -Path $turnFile -Pattern "^${Field}:" |
         Select-Object -First 1
@@ -189,7 +195,7 @@ function Get-ReplTurnCacheField {
 
 function Invoke-WorkflowAppendActions {
     param([string]$ParamsYaml)
-    $turnFile = Join-Path $script:ReplInvokeCacheDir 'current-turn.yaml'
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return $true }
 
     $added = 0
@@ -210,7 +216,7 @@ function Invoke-WorkflowAppendActions {
 
 function Invoke-WorkflowCompleteTurn {
     param([string]$ParamsYaml)
-    $turnFile = Join-Path $script:ReplInvokeCacheDir 'current-turn.yaml'
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return $true }
 
     $responseText = '(no response provided)'

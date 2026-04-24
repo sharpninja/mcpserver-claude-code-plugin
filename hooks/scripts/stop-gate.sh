@@ -16,7 +16,11 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-CACHE_DIR="${PLUGIN_ROOT_OVERRIDE:-$CLAUDE_PLUGIN_ROOT}/cache"
+if ! type resolve_cache_dir >/dev/null 2>&1; then
+    # shellcheck source=../../lib/resolve-cache-dir.sh
+    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+fi
+CACHE_DIR="$(resolve_cache_dir)"
 TURN_FILE="$CACHE_DIR/current-turn.yaml"
 
 # Read stdin (may be empty) so Claude Code doesn't complain about an unread pipe.
@@ -66,7 +70,7 @@ fi
 
 # Gate 2 — build broken after a code edit.
 if [ "$CODE_EDITS" -gt 0 ] && [ "$BUILD_STATUS" = "failed" ]; then
-    REASON="Last build in this turn failed after ${CODE_EDITS} code edit(s). Fix the build errors before claiming done, or explicitly accept failure by writing cache/turn-accept-failure.marker."
+    REASON="Last build in this turn failed after ${CODE_EDITS} code edit(s). Fix the build errors before claiming done, or explicitly accept failure by writing ${CACHE_DIR}/turn-accept-failure.marker."
     if [ -f "$CACHE_DIR/turn-accept-failure.marker" ]; then
         rm -f "$CACHE_DIR/turn-accept-failure.marker"
     else

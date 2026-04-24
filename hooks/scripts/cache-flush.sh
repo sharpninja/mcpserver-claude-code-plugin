@@ -6,9 +6,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
-# Source cache manager (which sources repl-invoke if needed)
+# Source cache manager (which sources repl-invoke if needed). The cache
+# manager resolves its own path via lib/resolve-cache-dir.sh: honor any
+# caller-supplied PLUGIN_ROOT_OVERRIDE / MCP_CACHE_DIR_OVERRIDE, otherwise
+# walk up to the workspace marker.
 if ! type cache_flush >/dev/null 2>&1; then
-    export PLUGIN_ROOT_OVERRIDE="${PLUGIN_ROOT_OVERRIDE:-$CLAUDE_PLUGIN_ROOT}"
     # shellcheck source=../../lib/cache-manager.sh
     source "$CLAUDE_PLUGIN_ROOT/lib/cache-manager.sh"
 fi

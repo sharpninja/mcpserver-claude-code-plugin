@@ -14,10 +14,14 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$pluginRoot = Split-Path -Parent $scriptDir
-$cacheDir = Join-Path $pluginRoot 'cache'
-$pendingDir = Join-Path $cacheDir 'pending'
 $maxRetries = 3
+
+if (-not (Get-Command Resolve-McpCacheDir -ErrorAction SilentlyContinue)) {
+    . (Join-Path $scriptDir 'resolve-cache-dir.ps1')
+}
+
+$cacheDir = Resolve-McpCacheDir
+$pendingDir = Join-Path $cacheDir 'pending'
 
 if (-not (Test-Path $pendingDir)) { New-Item -ItemType Directory -Path $pendingDir -Force | Out-Null }
 

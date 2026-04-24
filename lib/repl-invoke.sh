@@ -12,7 +12,15 @@ set -uo pipefail
 
 REPL_INVOKE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPL_INVOKE_PLUGIN_ROOT="${PLUGIN_ROOT_OVERRIDE:-$(cd "$REPL_INVOKE_SCRIPT_DIR/.." && pwd)}"
-REPL_INVOKE_CACHE_DIR="${REPL_INVOKE_PLUGIN_ROOT}/cache"
+
+if ! type resolve_cache_dir >/dev/null 2>&1; then
+    # shellcheck source=./resolve-cache-dir.sh
+    source "$REPL_INVOKE_SCRIPT_DIR/resolve-cache-dir.sh"
+fi
+
+# Cache dir is resolved lazily per-call so workspace context shifts (CWD,
+# marker file appearing/moving) do not latch onto a stale path.
+_repl_cache_dir() { resolve_cache_dir; }
 
 _repl_yaml_get() {
     # _repl_yaml_get <yaml_text> <key>
@@ -22,7 +30,7 @@ _repl_yaml_get() {
 
 _repl_session_meta() {
     # Echo "sourceType sessionId" extracted from cache/session-state.yaml.
-    local f="${REPL_INVOKE_CACHE_DIR}/session-state.yaml"
+    local f="$(_repl_cache_dir)/session-state.yaml"
     [ -f "$f" ] || return 1
     local sid
     sid="$(grep '^sessionId:' "$f" | head -1 | sed 's/^sessionId:[[:space:]]*//')"
@@ -121,7 +129,7 @@ _repl_workflow_begin_turn() {
 _repl_workflow_append_actions() {
     # Increment codeEdits counter when params include filePath: lines.
     local params="$1"
-    local turn_file="${REPL_INVOKE_CACHE_DIR}/current-turn.yaml"
+    local turn_file="$(_repl_cache_dir)/current-turn.yaml"
     [ -f "$turn_file" ] || return 0
 
     # grep -c exits 1 on no-match; fall back to 0 so pipefail doesn't bubble.
@@ -153,7 +161,7 @@ _repl_workflow_append_actions() {
 _repl_workflow_complete_turn() {
     # Flip status -> completed and persist response summary.
     local params="$1"
-    local turn_file="${REPL_INVOKE_CACHE_DIR}/current-turn.yaml"
+    local turn_file="$(_repl_cache_dir)/current-turn.yaml"
     [ -f "$turn_file" ] || return 0
 
     local req_id title response_text
@@ -228,4 +236,4 @@ ${indented_params}"
     echo "$envelope"
 }
 
-export -f repl_invoke repl_build_envelope _repl_invoke_raw _repl_persist_turn _repl_session_meta _repl_yaml_get _repl_workflow_begin_turn _repl_workflow_append_actions _repl_workflow_complete_turn _repl_workflow_open_session 2>/dev/null || true
+export -f repl_invoke repl_build_envelope _repl_invoke_raw _repl_persist_turn _repl_session_meta _repl_yaml_get _repl_cache_dir _repl_workflow_begin_turn _repl_workflow_append_actions _repl_workflow_complete_turn _repl_workflow_open_session 2>/dev/null || true

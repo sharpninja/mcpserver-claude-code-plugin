@@ -6,7 +6,11 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-CACHE_DIR="${PLUGIN_ROOT_OVERRIDE:-$CLAUDE_PLUGIN_ROOT}/cache"
+if ! type resolve_cache_dir >/dev/null 2>&1; then
+    # shellcheck source=../../lib/resolve-cache-dir.sh
+    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+fi
+CACHE_DIR="$(resolve_cache_dir)"
 
 _write_untrusted() {
     mkdir -p "$CACHE_DIR"
