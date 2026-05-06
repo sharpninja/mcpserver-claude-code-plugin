@@ -68,6 +68,28 @@ function Get-MarkerEndpoint {
     return $null
 }
 
+function Get-MarkerAgentPluginField {
+    param(
+        [Parameter(Mandatory)][string]$MarkerFile,
+        [Parameter(Mandatory)][string]$FieldName
+    )
+
+    $inAgentPlugins = $false
+    foreach ($line in (Get-Content $MarkerFile)) {
+        if ($line -match '^agent_plugins:') {
+            $inAgentPlugins = $true
+            continue
+        }
+        if ($inAgentPlugins -and $line -match '^\S') {
+            break
+        }
+        if ($inAgentPlugins -and $line -match "^\s+${FieldName}:\s*(.+)$") {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
 function Test-MarkerSignature {
     param(
         [Parameter(Mandatory)][string]$MarkerFile
@@ -110,6 +132,13 @@ function Test-MarkerSignature {
             $val = $Matches[2].Trim()
             $payload += "endpoints.$key=$val`n"
         }
+    }
+
+    $agentPluginsPolicy = Get-MarkerAgentPluginField -MarkerFile $MarkerFile -FieldName 'policy'
+    $agentPluginsDigest = Get-MarkerAgentPluginField -MarkerFile $MarkerFile -FieldName 'contract_digest'
+    if ($agentPluginsPolicy -or $agentPluginsDigest) {
+        $payload += "agentPlugins.policy=$agentPluginsPolicy`n"
+        $payload += "agentPlugins.contractDigest=$agentPluginsDigest`n"
     }
 
     # Extract stored signature
