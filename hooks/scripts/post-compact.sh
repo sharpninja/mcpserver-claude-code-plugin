@@ -5,10 +5,11 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 if ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 SESSION_STATE="$CACHE_DIR/session-state.yaml"
@@ -16,12 +17,12 @@ SESSION_STATE="$CACHE_DIR/session-state.yaml"
 # Source libraries if not already loaded
 if ! type full_bootstrap >/dev/null 2>&1; then
     # shellcheck source=../../lib/marker-resolver.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/marker-resolver.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/marker-resolver.sh"
 fi
 
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
 fi
 
 # Re-verify the marker after compaction

@@ -15,17 +15,18 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 if ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 
 # Source libraries
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
+    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
 fi
 
 # Read stdin into PAYLOAD (may be empty)

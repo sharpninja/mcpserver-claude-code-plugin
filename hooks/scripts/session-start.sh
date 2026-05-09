@@ -5,10 +5,11 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 if ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 
@@ -24,22 +25,22 @@ EOF
 # Source shared libraries (only if functions not already defined, e.g. mocked in tests)
 if ! type full_bootstrap >/dev/null 2>&1; then
     # shellcheck source=../../lib/marker-resolver.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/marker-resolver.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/marker-resolver.sh"
 fi
 
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
 fi
 
 if ! type cache_flush >/dev/null 2>&1; then
     # shellcheck source=../../lib/cache-manager.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/cache-manager.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/cache-manager.sh"
 fi
 
 # Ensure ensure-repl has run (install mcpserver-repl if missing)
 if ! command -v mcpserver-repl >/dev/null 2>&1; then
-    bash "$CLAUDE_PLUGIN_ROOT/lib/ensure-repl.sh" >&2 || true
+    bash "$SCRIPT_PLUGIN_ROOT/lib/ensure-repl.sh" >&2 || true
 fi
 
 # Run bootstrap

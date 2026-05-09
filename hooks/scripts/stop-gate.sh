@@ -15,10 +15,11 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 if ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 TURN_FILE="$CACHE_DIR/current-turn.yaml"
@@ -51,9 +52,9 @@ CODE_EDITS="${CODE_EDITS:-0}"
 # the MCP tool surface); auto-complete the turn here so Stop is not wedged.
 # If self-heal fails, fall through to the explicit block.
 if [ "$TURN_STATUS" = "in_progress" ]; then
-    if [ -f "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh" ]; then
+    if [ -f "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh" ]; then
         # shellcheck source=../../lib/repl-invoke.sh
-        source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
+        source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
     fi
     if type _repl_workflow_complete_turn >/dev/null 2>&1; then
         AUTO_PARAMS="response: |

@@ -5,10 +5,11 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 if ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 PLAN_MAP="$CACHE_DIR/plan-todo-map.yaml"
@@ -16,7 +17,7 @@ PLAN_MAP="$CACHE_DIR/plan-todo-map.yaml"
 # Source libraries if not already loaded
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
 fi
 
 # Resolve plan file path from TOOL_INPUT or first argument

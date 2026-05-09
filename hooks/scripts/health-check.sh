@@ -4,12 +4,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
 
 # Source repl-invoke if not already loaded
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
-    source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.sh"
+    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
 fi
 
 if repl_invoke "workflow.sessionlog.bootstrap" "" >/dev/null 2>&1; then
