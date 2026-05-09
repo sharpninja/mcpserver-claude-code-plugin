@@ -309,7 +309,7 @@ payload:
 
 ### Wiki Export
 
-Use `format: wiki` with `docType: all` to export wiki files directly into the workspace. The result returns metadata, not archive bytes. Files are written under `docs/Project/wiki/azure` and `docs/Project/wiki/github`. Each folder includes `.mcp-requirements-manifest.json`; Azure also includes `.order`; GitHub also includes `_Sidebar.md` and `_Footer.md`.
+Use `format: wiki` with `docType: all` to export wiki files directly into the workspace. The normal result returns metadata, not archive bytes. Files are written under `docs/Project/wiki/azure` and `docs/Project/wiki/github`. Each folder includes `.mcp-requirements-manifest.json`; Azure also includes `.order`; GitHub also includes `_Sidebar.md` and `_Footer.md`. When an older REPL cannot serialize the metadata result, the wrapper may return `contentBase64` with `contentType: application/json`; decode it to read the same export metadata.
 
 ```yaml
 type: request
