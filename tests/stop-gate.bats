@@ -46,13 +46,13 @@ run_stop_gate() {
     echo "$out" | grep -qF '"status":"no-turn"'
 }
 
-@test "in_progress turn → decision:block" {
+@test "in_progress turn → self-heal passes" {
     write_turn "in_progress"
     out="$(run_stop_gate)"
-    echo "$out" | grep -qF '"decision":"block"'
+    echo "$out" | grep -qF '"status":"passed"'
 }
 
-@test "in_progress block reason names turn id" {
+@test "in_progress self-heal names turn id" {
     write_turn "in_progress"
     out="$(run_stop_gate)"
     echo "$out" | grep -qF "req-test-stop-001"
