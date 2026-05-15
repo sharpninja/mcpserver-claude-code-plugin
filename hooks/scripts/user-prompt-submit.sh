@@ -23,6 +23,20 @@ if ! type resolve_cache_dir >/dev/null 2>&1; then
 fi
 CACHE_DIR="$(resolve_cache_dir)"
 
+mkdir -p "$CACHE_DIR"
+LOCK_DIR="$CACHE_DIR/user-prompt-submit.lock"
+if [ -d "$LOCK_DIR" ]; then
+    LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$LOCK_DIR" 2>/dev/null || echo 0) ))
+    if [ "$LOCK_AGE" -gt "${MCP_PLUGIN_STALE_LOCK_SECONDS:-120}" ]; then
+        rm -rf "$LOCK_DIR"
+    fi
+fi
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","status":"already-running"}}\n'
+    exit 0
+fi
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 # Source libraries
 if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
@@ -75,10 +89,17 @@ ${QUERY_TEXT_BLOCK}"
 
 # Open the turn. Graceful fallback to cache_write if REPL unavailable.
 if type repl_invoke >/dev/null 2>&1; then
+    PREVIOUS_REPL_TIMEOUT="${REPL_TIMEOUT:-}"
+    export REPL_TIMEOUT="${REPL_SESSIONLOG_REPL_TIMEOUT:-8}"
     if ! repl_invoke "workflow.sessionlog.beginTurn" "$TURN_PARAMS" >/dev/null 2>&1; then
         if type cache_write >/dev/null 2>&1; then
             cache_write "workflow.sessionlog.beginTurn" "$TURN_PARAMS" >/dev/null 2>&1 || true
         fi
+    fi
+    if [ -n "$PREVIOUS_REPL_TIMEOUT" ]; then
+        export REPL_TIMEOUT="$PREVIOUS_REPL_TIMEOUT"
+    else
+        unset REPL_TIMEOUT
     fi
 fi
 
