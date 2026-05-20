@@ -10,6 +10,19 @@ version: 0.1.0
 
 To interact with project TODOs, use the `workflow.todo.*` REPL command namespace via `mcpserver-repl --agent-stdio`. All commands follow the standard YAML envelope protocol: send a `type: request` envelope on stdin, receive a `type: result` or `type: error` envelope on stdout. Streaming commands additionally emit a sequence of `type: event` envelopes before the final result.
 
+## Internal TODO Tracking Toggle
+
+By default, agents should keep transient checklist state locally and use MCP TODOs only for durable project tasks. To make MCP TODOs the backing store for internal agent TODO tracking, enable the local toggle:
+
+```yaml
+type: request
+payload:
+  requestId: req-20260409T115900Z-todo-internal-enable
+  method: workflow.todo.internal.enable
+```
+
+Use `workflow.todo.internal.status` to inspect the current mode and `workflow.todo.internal.disable` to return to local-only internal tracking. The `MCP_CODEX_INTERNAL_TODO`, `MCPSERVER_CODEX_INTERNAL_TODO`, and `CODEX_MCP_TODO` environment variables override the cached setting for the current process.
+
 ## TODO ID Naming Conventions
 
 Persist only IDs that conform to one of two patterns:

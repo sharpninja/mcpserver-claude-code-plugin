@@ -64,7 +64,7 @@ timestamp: "2026-04-19T00:00:00Z"
         $env:PLUGIN_ROOT_OVERRIDE = $script:Sandbox
 
         # Dot-source lib so Invoke-ReplMethod is in scope.
-        . $script:LibPath
+        . (Join-Path $script:PluginRoot 'lib\repl-invoke.ps1')
     }
 
     AfterEach {

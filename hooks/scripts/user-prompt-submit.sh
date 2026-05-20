@@ -114,11 +114,16 @@ codeEdits: 0
 lastBuildStatus: unknown
 EOF
 
+INTERNAL_TODO_REMINDER="Use TODO and requirements tools only as needed."
+if type _repl_internal_todo_is_enabled >/dev/null 2>&1 && _repl_internal_todo_is_enabled; then
+    INTERNAL_TODO_REMINDER="MCP-backed internal TODO tracking is enabled. Mirror durable plan items through workflow.todo.* and keep only transient execution details in the local checklist."
+fi
+
 # Inject a per-turn reminder into Claude's context so the agent sees the
 # exact contract that applies to this turn. The stop-gate hook auto-closes
 # the turn via the plugin's own repl-invoke.sh shim — Claude is NOT expected
 # to invoke workflow.sessionlog.* (those verbs are not exposed as MCP tools).
-REMINDER="session log turn ${TURN_REQUEST_ID} is now active. The stop-gate hook will auto-close the turn on finalize. PostToolUse/Write|Edit hooks auto-log actions. If you want richer action metadata, POST /mcpserver/sessionlog directly with the workspace API key from AGENTS-README-FIRST.yaml."
+REMINDER="session log turn ${TURN_REQUEST_ID} is now active. ${INTERNAL_TODO_REMINDER} The stop-gate hook will auto-close the turn on finalize. PostToolUse/Write|Edit hooks auto-log actions. If you want richer action metadata, POST /mcpserver/sessionlog directly with the workspace API key from AGENTS-README-FIRST.yaml."
 
 printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","status":"turn-opened","turnRequestId":"%s","additionalContext":"%s"}}\n' \
     "$TURN_REQUEST_ID" \

@@ -158,8 +158,9 @@ EOF
         source '$HOOKS_DIR/session-start.sh'
     " || true
 
-    [ -f "$TEST_PLUGIN_ROOT/cache/session-state.yaml" ]
-    grep -q "MCP_UNTRUSTED" "$TEST_PLUGIN_ROOT/cache/session-state.yaml"
+    state_file="$(find "$TEST_PLUGIN_ROOT/cache" -name session-state.yaml | head -1)"
+    [ -f "$state_file" ]
+    grep -q "MCP_UNTRUSTED" "$state_file"
     rm -rf "$TEST_PLUGIN_ROOT"
 }
 

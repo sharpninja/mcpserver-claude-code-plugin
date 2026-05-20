@@ -44,6 +44,11 @@ get_body() {
     [ -s "$SKILLS_DIR/graphrag/SKILL.md" ]
 }
 
+@test "skills/workspace/SKILL.md exists and is non-empty" {
+    [ -f "$SKILLS_DIR/workspace/SKILL.md" ]
+    [ -s "$SKILLS_DIR/workspace/SKILL.md" ]
+}
+
 # ══════════════════════════════════════════════
 # Frontmatter: starts with --- delimiter
 # ══════════════════════════════════════════════
@@ -226,6 +231,13 @@ check_imperative() {
 
 @test "skills/graphrag/SKILL.md contains YAML envelope example (type: request)" {
     grep -q "type: request" "$SKILLS_DIR/graphrag/SKILL.md"
+}
+
+@test "skills/workspace/SKILL.md documents workspace initialization commands" {
+    grep -q "client.Workspace.ListAsync" "$SKILLS_DIR/workspace/SKILL.md"
+    grep -q "client.Workspace.CreateAsync" "$SKILLS_DIR/workspace/SKILL.md"
+    grep -q "client.Workspace.InitAsync" "$SKILLS_DIR/workspace/SKILL.md"
+    grep -q "type: request" "$SKILLS_DIR/workspace/SKILL.md"
 }
 
 # ══════════════════════════════════════════════

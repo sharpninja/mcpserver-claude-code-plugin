@@ -17,11 +17,17 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
-if ! type resolve_cache_dir >/dev/null 2>&1; then
+if [ -f "$SCRIPT_PLUGIN_ROOT/lib/cache-scope.sh" ]; then
+    # shellcheck source=../../lib/cache-scope.sh
+    source "$SCRIPT_PLUGIN_ROOT/lib/cache-scope.sh"
+    cache_scope_init "$SCRIPT_PLUGIN_ROOT" "$PWD"
+elif ! type resolve_cache_dir >/dev/null 2>&1; then
     # shellcheck source=../../lib/resolve-cache-dir.sh
     source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
+    CACHE_DIR="$(resolve_cache_dir)"
+else
+    CACHE_DIR="$(resolve_cache_dir)"
 fi
-CACHE_DIR="$(resolve_cache_dir)"
 TURN_FILE="$CACHE_DIR/current-turn.yaml"
 
 # Read stdin (may be empty) so Claude Code doesn't complain about an unread pipe.

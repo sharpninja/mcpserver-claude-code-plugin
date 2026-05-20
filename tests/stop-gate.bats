@@ -10,14 +10,16 @@
 PLUGIN_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 LIB="$PLUGIN_ROOT/lib/repl-invoke.sh"
 STOP_GATE="$PLUGIN_ROOT/hooks/scripts/stop-gate.sh"
+source "$PLUGIN_ROOT/tests/cache-scope-helper.bash"
 
 setup() {
     SANDBOX="$(mktemp -d)"
-    mkdir -p "$SANDBOX/cache"
+    mkdir -p "$SANDBOX/cache" "$SANDBOX/workspace"
 
     export CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT"
     export PLUGIN_ROOT_OVERRIDE="$SANDBOX"
     unset CLAUDE_STOP_HOOK_ACTIVE
+    init_test_cache "$SANDBOX/workspace" "ClaudeCode-20260419T000000Z-test"
 }
 
 teardown() {
@@ -26,7 +28,7 @@ teardown() {
 
 write_turn() {
     local status="${1:-in_progress}" edits="${2:-0}" build="${3:-unknown}"
-    cat > "$SANDBOX/cache/current-turn.yaml" <<EOF
+    cat > "$(test_cache_file current-turn.yaml)" <<EOF
 turnRequestId: req-test-stop-001
 queryTitle: Stop gate test
 openedAt: 2026-04-19T00:00:00Z
@@ -41,7 +43,7 @@ run_stop_gate() {
 }
 
 @test "no turn file → no-turn status" {
-    rm -f "$SANDBOX/cache/current-turn.yaml"
+    rm -f "$(test_cache_file current-turn.yaml)"
     out="$(run_stop_gate)"
     echo "$out" | grep -qF '"status":"no-turn"'
 }
@@ -73,22 +75,22 @@ run_stop_gate() {
 
 @test "accept-failure marker unblocks failed-build stop" {
     write_turn "completed" 3 "failed"
-    touch "$SANDBOX/cache/turn-accept-failure.marker"
+    touch "$(test_cache_file turn-accept-failure.marker)"
     out="$(run_stop_gate)"
     echo "$out" | grep -qF '"status":"passed"'
 }
 
 @test "accept-failure marker is consumed (deleted) after use" {
     write_turn "completed" 3 "failed"
-    touch "$SANDBOX/cache/turn-accept-failure.marker"
+    touch "$(test_cache_file turn-accept-failure.marker)"
     run_stop_gate >/dev/null
-    [ ! -f "$SANDBOX/cache/turn-accept-failure.marker" ]
+    [ ! -f "$(test_cache_file turn-accept-failure.marker)" ]
 }
 
 @test "end-to-end: shim's completeTurn flips cache so stop-gate passes" {
     write_turn "in_progress"
 
-    cat > "$SANDBOX/cache/session-state.yaml" <<EOF
+    cat > "$(test_cache_file session-state.yaml)" <<EOF
 status: verified
 sessionId: ClaudeCode-20260419T000000Z-test
 workspacePath: "/tmp/ws"
@@ -102,7 +104,7 @@ EOF
 response: |
   E2E test response." ) >/dev/null 2>&1
 
-    status_after="$(grep '^status:' "$SANDBOX/cache/current-turn.yaml" | head -1 | sed 's/^status:[[:space:]]*//')"
+    status_after="$(grep '^status:' "$(test_cache_file current-turn.yaml)" | head -1 | sed 's/^status:[[:space:]]*//')"
     [ "$status_after" = "completed" ]
 
     out="$(run_stop_gate)"
