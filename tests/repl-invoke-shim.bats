@@ -386,6 +386,57 @@ response: |
     [ "$status" -eq 0 ]
 }
 
+@test "completeTurn with rich params routes to importRecovery" {
+    command -v node >/dev/null 2>&1 || skip "node not available"
+    write_requirements_state
+    export MCPSERVER_API_KEY="test-api-key"
+    cat > "$(test_cache_file current-turn.yaml)" <<EOF
+turnRequestId: req-test-shim-rich-001
+queryTitle: Rich turn test
+openedAt: 2026-04-19T00:00:00Z
+status: in_progress
+codeEdits: 0
+lastBuildStatus: unknown
+EOF
+    source "$LIB"
+    run repl_invoke "workflow.sessionlog.completeTurn" "response: Done.
+interpretation: I analyzed the workspace query and fixed case sensitivity.
+processingDialog:
+  - timestamp: 2026-04-19T00:00:01Z
+    role: model
+    category: reasoning
+    content: Checking SessionLogService for workspace comparison.
+actions:
+  - order: 1
+    type: edit
+    status: completed
+    description: Fixed OrdinalIgnoreCase in SessionLogService.cs
+    filePath: src/Services/SessionLogService.cs
+filesModified:
+  - src/Services/SessionLogService.cs
+contextList: []
+blockers: []
+designDecisions:
+  - \"Decision: use StringComparison.OrdinalIgnoreCase for workspace path matching\"
+requirementsDiscovered:
+  - FR-MCP-007"
+    unset MCPSERVER_API_KEY
+    [ "$status" -eq 0 ]
+    [ "$(read_status)" = "completed" ]
+    # importRecovery dispatched via HTTP; curl stub logs curl_url=
+    grep -q "curl_url=.*mcpserver/sessionlog" "$STUB_LOG"
+}
+
+@test "completeTurn with plain params does not call importRecovery" {
+    write_turn "in_progress"
+    source "$LIB"
+    run repl_invoke "workflow.sessionlog.completeTurn" "response: Simple done."
+    [ "$status" -eq 0 ]
+    [ "$(read_status)" = "completed" ]
+    # Plain params should NOT route to importRecovery
+    ! grep -q "method=workflow.sessionlog.importRecovery" "$STUB_LOG"
+}
+
 @test "appendActions bumps codeEdits once per filePath: in params" {
     write_turn "in_progress" 0
     source "$LIB"
