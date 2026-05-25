@@ -63,8 +63,14 @@ if [ "$TURN_STATUS" = "in_progress" ]; then
         source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
     fi
     if type _repl_workflow_complete_turn >/dev/null 2>&1; then
+        # Try to enrich with Codex JSONL data if a transcript path was recorded.
+        CODEX_JSONL_PATH_SG="$(grep '^codexJsonlPath:' "$TURN_FILE" 2>/dev/null | head -1 | sed 's/^codexJsonlPath:[[:space:]]*//' | tr -d '"' || true)"
         AUTO_PARAMS="response: |
     Auto-closed by stop-gate.sh (turn self-heal). Claude Code cannot invoke workflow.sessionlog.* directly; the hook now finalizes the turn when the response finishes."
+        if [ -n "$CODEX_JSONL_PATH_SG" ] && [ -f "$CODEX_JSONL_PATH_SG" ] && command -v node >/dev/null 2>&1; then
+            JSONL_PARAMS="$(node "${SCRIPT_PLUGIN_ROOT}/lib/codex-jsonl-enrich.js" "$CODEX_JSONL_PATH_SG" "Auto-closed by stop-gate.sh (turn self-heal; enriched from Codex JSONL)" 2>/dev/null || true)"
+            [ -n "$JSONL_PARAMS" ] && AUTO_PARAMS="$JSONL_PARAMS"
+        fi
         PREVIOUS_REPL_TIMEOUT="${REPL_TIMEOUT:-}"
         export REPL_TIMEOUT="${REPL_SESSIONLOG_REPL_TIMEOUT:-8}"
         _repl_workflow_complete_turn "$AUTO_PARAMS" >/dev/null 2>&1 || true

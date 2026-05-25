@@ -118,3 +118,24 @@ response: |
     unset CLAUDE_STOP_HOOK_ACTIVE
     echo "$out" | grep -qF '"status":"already-reprompted"'
 }
+
+@test "in_progress self-heal with codexJsonlPath passes and uses JSONL enrichment" {
+    command -v node >/dev/null 2>&1 || skip "node not available"
+    FIXTURES="$PLUGIN_ROOT/tests/fixtures"
+    # Write turn file that references a real JSONL fixture
+    cat > "$(test_cache_file current-turn.yaml)" <<EOF
+turnRequestId: req-test-stop-jsonl-001
+queryTitle: Stop gate JSONL test
+openedAt: 2026-04-19T00:00:00Z
+status: in_progress
+codeEdits: 0
+lastBuildStatus: unknown
+codexJsonlPath: "${FIXTURES}/parent-rollout.jsonl"
+EOF
+    out="$(run_stop_gate)"
+    # Self-heal must pass regardless of JSONL enrichment outcome
+    echo "$out" | grep -qF '"status":"passed"'
+    # Turn file status must be flipped to completed
+    status_after="$(grep '^status:' "$(test_cache_file current-turn.yaml)" | head -1 | sed 's/^status:[[:space:]]*//')"
+    [ "$status_after" = "completed" ]
+}

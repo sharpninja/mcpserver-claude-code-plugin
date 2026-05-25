@@ -103,16 +103,30 @@ if type repl_invoke >/dev/null 2>&1; then
     fi
 fi
 
+# Discover Codex JSONL transcript path for this session (if running under Codex CLI).
+# Codex may set CODEX_SESSION_FILE or CODEX_ROLLOUT_FILE; otherwise scan the session dir.
+_CODEX_JSONL_PATH="${CODEX_SESSION_FILE:-${CODEX_ROLLOUT_FILE:-}}"
+if [ -z "$_CODEX_JSONL_PATH" ] && command -v node >/dev/null 2>&1; then
+    _CODEX_SESSION_DIR="${CODEX_SESSION_DIR:-${HOME}/.codex/sessions}"
+    _TODAY_DIR="${_CODEX_SESSION_DIR}/$(date -u +%Y/%m/%d 2>/dev/null || true)"
+    if [ -d "$_TODAY_DIR" ]; then
+        _CODEX_JSONL_PATH="$(ls -t "${_TODAY_DIR}"/rollout-*.jsonl 2>/dev/null | head -1 || true)"
+    fi
+fi
+
 # Record the active turn so Stop hook can verify completion.
 mkdir -p "$CACHE_DIR"
-cat > "$CACHE_DIR/current-turn.yaml" <<EOF
-turnRequestId: ${TURN_REQUEST_ID}
-queryTitle: ${QUERY_TITLE}
-openedAt: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-status: in_progress
-codeEdits: 0
-lastBuildStatus: unknown
-EOF
+{
+    printf 'turnRequestId: %s\n' "${TURN_REQUEST_ID}"
+    printf 'queryTitle: %s\n' "${QUERY_TITLE}"
+    printf 'openedAt: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'status: in_progress\n'
+    printf 'codeEdits: 0\n'
+    printf 'lastBuildStatus: unknown\n'
+    if [ -n "$_CODEX_JSONL_PATH" ] && [ -f "$_CODEX_JSONL_PATH" ]; then
+        printf 'codexJsonlPath: "%s"\n' "$_CODEX_JSONL_PATH"
+    fi
+} > "$CACHE_DIR/current-turn.yaml"
 
 INTERNAL_TODO_REMINDER="Use TODO and requirements tools only as needed."
 if type _repl_internal_todo_is_enabled >/dev/null 2>&1 && _repl_internal_todo_is_enabled; then

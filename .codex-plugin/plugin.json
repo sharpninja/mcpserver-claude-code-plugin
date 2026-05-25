@@ -1,0 +1,58 @@
+{
+  "name": "mcpserver-codex",
+  "version": "1.1.0",
+  "description": "Connect Codex CLI to McpServer for session logging, TODO management, requirements tracking, and subagent transcript capture.",
+  "author": {
+    "name": "Payton Byrd (The Sharp Ninja)",
+    "url": "https://github.com/sharpninja"
+  },
+  "homepage": "https://github.com/sharpninja/McpServer",
+  "repository": "https://github.com/sharpninja/mcpserver-claude-code-plugin",
+  "license": "MIT",
+  "keywords": ["mcp", "session-log", "codex", "subagent", "todo", "requirements"],
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": "bash ${PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+        "timeout": 15
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "command": "bash ${PLUGIN_ROOT}/hooks/scripts/session-end.sh",
+        "timeout": 10
+      }
+    ],
+    "userPromptSubmit": [
+      {
+        "type": "command",
+        "command": "bash ${PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.sh",
+        "timeout": 10
+      }
+    ],
+    "taskComplete": [
+      {
+        "type": "command",
+        "command": "bash ${PLUGIN_ROOT}/lib/final-response.sh",
+        "timeout": 15,
+        "description": "Complete MCP session-log turn with rich fields from Codex JSONL"
+      }
+    ],
+    "subagentComplete": [
+      {
+        "type": "command",
+        "command": "bash ${PLUGIN_ROOT}/hooks/scripts/subagent-import.sh",
+        "timeout": 30,
+        "description": "Import subagent JSONL transcript as first-class MCP session-log turns"
+      }
+    ]
+  },
+  "codexFeatures": {
+    "jsonlParsing": true,
+    "subagentCapture": true,
+    "richTurnFields": true,
+    "secretRedaction": true
+  }
+}
