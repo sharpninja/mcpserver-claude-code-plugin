@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To interact with project TODOs, use the `workflow.todo.*` REPL command namespace via `mcpserver-repl --agent-stdio`. All commands follow the standard YAML envelope protocol: send a `type: request` envelope on stdin, receive a `type: result` or `type: error` envelope on stdout. Streaming commands additionally emit a sequence of `type: event` envelopes before the final result.
+To interact with project TODOs, use the `workflow.todo.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Receive a `type: result` or `type: error` envelope on stdout. Streaming commands additionally emit a sequence of `type: event` envelopes before the final result.
 
 ## Internal TODO Tracking Toggle
 

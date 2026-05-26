@@ -10,6 +10,8 @@ version: 0.1.0
 
 To manage functional requirements (FR), technical requirements (TR), test requirements (TEST), and their traceability mappings, use this Claude plugin's declared hook/wrapper for the `workflow.requirements.*` namespace. Do not substitute raw REST calls, generic `mcpserver-repl --agent-stdio`, helper modules, or another agent's plugin for normal requirements work.
 
+The plugin wrapper validates documented params and emits single-line JSON to REPL stdio. Any direct REPL diagnostic call must use one single-line JSON request envelope, not formatted YAML.
+
 The database is the source of truth for requirements. Markdown files are import/export projections only. Every operation is scoped to the workspace resolved from the signed marker, and generated workspace output must contain only the requested workspace's FR, TR, TEST, and traceability links.
 
 ## Requirement ID Conventions
@@ -91,6 +93,31 @@ payload:
 ```
 
 Required fields: `id`, `title`, `description`, `priority`, `area`. The `notes` field is optional.
+
+### Batch Create Or Update
+
+When creating or updating multiple records, prefer the atomic batch commands instead of Markdown ingestion. Batch commands accept YAML `records:` arrays and fail all records if any record is invalid, conflicts, or is missing during update.
+
+Use per-kind commands when every record is the same type:
+
+```yaml
+type: request
+payload:
+  requestId: req-20260409T120002Z-createfr-batch-001
+  method: workflow.requirements.createFrBatch
+  params:
+    records:
+      - id: FR-MCP-004
+        title: Batch requirements
+        description: The system must accept multiple requirement records in one request.
+        priority: high
+      - id: FR-MCP-005
+        title: Atomic validation
+        description: The system must reject the whole batch when one record is invalid.
+        priority: high
+```
+
+Use `workflow.requirements.updateFrBatch`, `createTrBatch`, `updateTrBatch`, `createTestBatch`, and `updateTestBatch` for per-kind batches. For mixed FR/TR/TEST arrays, use `workflow.requirements.createBatch` or `workflow.requirements.updateBatch` and include `kind: fr|tr|test` on each record.
 
 ### Updating an FR
 

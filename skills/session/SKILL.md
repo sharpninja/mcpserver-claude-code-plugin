@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To manage agent session logs, use the `workflow.sessionlog.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Session logging captures agent activity, reasoning dialog, file operations, and design decisions as a structured audit trail.
+To manage agent session logs, use the `workflow.sessionlog.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Session logging captures agent activity, reasoning dialog, file operations, and design decisions as a structured audit trail.
 
 Most session management is automated by the plugin hooks in `hooks/`. This skill covers manual operations, history queries, and the full lifecycle for agents that need direct control.
 

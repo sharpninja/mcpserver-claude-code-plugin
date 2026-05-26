@@ -8,7 +8,7 @@ Connect [Claude Code](https://claude.com/claude-code) to [McpServer](https://git
 - **Session hooks** — automatic session creation, turn tracking, context reload after compaction
 - **Plan tracking** — auto-creates MCP TODO when a plan is approved, syncs updates on plan edits
 - **Offline resilience** — local YAML cache for writes when MCP server is unavailable, automatic flush on reconnect
-- **Four skills**: TODO, Session Log, Requirements, GraphRAG — all using `mcpserver-repl` YAML-over-STDIO protocol
+- **Four skills**: TODO, Session Log, Requirements, GraphRAG — all using `mcpserver-repl` single-line JSON over STDIO
 
 ## Prerequisites
 
