@@ -24,13 +24,13 @@ fi
 FILE_PATH="${TOOL_INPUT:-${1:-}}"
 
 if [ -z "$FILE_PATH" ]; then
-    printf '{"hookSpecificOutput":{"status":"skipped","reason":"no file path"}}\n'
+    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"skipped","reason":"no file path"}}\n'
     exit 0
 fi
 
 # Check if plan-todo-map.yaml exists
 if [ ! -f "$PLAN_MAP" ]; then
-    printf '{"hookSpecificOutput":{"status":"skipped","reason":"no plan-todo-map"}}\n'
+    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"skipped","reason":"no plan-todo-map"}}\n'
     exit 0
 fi
 
@@ -39,7 +39,7 @@ TODO_ID=$(grep -A2 "planFile: ${FILE_PATH}" "$PLAN_MAP" 2>/dev/null \
     | grep 'todoId:' | head -1 | sed 's/.*todoId:[[:space:]]*//' || true)
 
 if [ -z "$TODO_ID" ]; then
-    printf '{"hookSpecificOutput":{"status":"skipped","reason":"no mapping for file"}}\n'
+    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"skipped","reason":"no mapping for file"}}\n'
     exit 0
 fi
 
@@ -50,4 +50,4 @@ status: modified"
 
 repl_invoke "todo.update" "$UPDATE_PARAMS" >/dev/null 2>&1 || true
 
-printf '{"hookSpecificOutput":{"status":"updated","todoId":"%s"}}\n' "$TODO_ID"
+printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"updated","todoId":"%s"}}\n' "$TODO_ID"
