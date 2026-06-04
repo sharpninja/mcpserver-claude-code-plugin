@@ -66,6 +66,26 @@ if [ "$method" = "client.Todo.UpdateAsync" ] && [ "${STUB_TODO_UPDATE_REJECT:-}"
     exit 0
 fi
 
+if [ "${STUB_WORKFLOW_REQUIREMENTS_GET_WITH_AC:-}" = "1" ]; then
+    case "$method" in
+        workflow.requirements.getFr|client.Requirements.GetFrAsync)
+            id="$(extract_yaml_value id)"
+            printf 'type: result\npayload:\n  result:\n    id: %s\n    title: Stored AC FR\n    description: Stored body\n    priority: medium\n    status: pending\n    notes: Stored notes\n    acceptanceCriteria:\n      - id: existing-ac-1\n        text: existing criterion text\n        isSatisfied: false\n' "$id"
+            exit 0
+            ;;
+        workflow.requirements.getTr|client.Requirements.GetTrAsync)
+            id="$(extract_yaml_value id)"
+            printf 'type: result\npayload:\n  result:\n    id: %s\n    title: Stored AC TR\n    description: Stored TR body\n    priority: medium\n    status: pending\n    notes: Stored TR notes\n    acceptanceCriteria:\n      - id: existing-ac-1\n        text: existing TR criterion\n        isSatisfied: false\n' "$id"
+            exit 0
+            ;;
+        workflow.requirements.getTest|client.Requirements.GetTestAsync)
+            id="$(extract_yaml_value id)"
+            printf 'type: result\npayload:\n  result:\n    id: %s\n    title: Stored AC TEST\n    condition: Stored condition\n    priority: medium\n    status: pending\n    notes: Stored TEST notes\n    acceptanceCriteria:\n      - id: existing-ac-1\n        text: existing TEST criterion\n        isSatisfied: false\n' "$id"
+            exit 0
+            ;;
+    esac
+fi
+
 case "$method" in
     client.SessionLog.SubmitAsync|client.SessionLog.QueryAsync|client.SessionLog.AppendDialogAsync|client.Todo.QueryAsync|client.Todo.UpdateAsync|client.Todo.GetAsync|client.Todo.GetByIdAsync|client.Todo.CreateAsync|client.Todo.DeleteAsync|client.Todo.AnalyzeRequirementsAsync)
         printf 'type: response\npayload:\n  ok: true\n'
@@ -223,6 +243,10 @@ case "$url" in
     */mcpserver/todo/*/requirements)
         content_type="application/json"
         payload='{"id":"RENDER-MAP3D-001","requirements":[]}'
+        ;;
+    */mcpserver/requirements/*/*/acceptance-criteria/copy-from-todo)
+        content_type="application/json"
+        payload='{"copied":true}'
         ;;
     */mcpserver/todo/*)
         content_type="application/json"
@@ -766,6 +790,97 @@ area: MCP"
     echo "$output" | grep -q "FR-MCP-901"
 }
 
+@test "workflow.requirements.createFr typed params include acceptanceCriteria block when provided" {
+    # FR-MCP-REQACPLUGIN-001 / TEST-MCP-REQACPLUGIN-BASH: the typed-params builder must emit
+    # the acceptanceCriteria YAML list so the typed-client CreateFrAsync call carries the
+    # structured criteria through to the server.
+    write_requirements_state
+    source "$LIB"
+
+    run repl_invoke "workflow.requirements.createFr" "id: FR-MCP-AC-100
+title: AC create
+description: Plugin must thread acceptanceCriteria through createFr
+priority: high
+area: MCP
+acceptanceCriteria:
+  - id: ac-1
+    text: 'First criterion'
+    isSatisfied: false
+  - id: ac-2
+    text: 'Second criterion'
+    isSatisfied: true
+    evidence: 'unit'"
+
+    [ "$status" -eq 0 ]
+    grep -q "method=client.Requirements.CreateFrAsync" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+acceptanceCriteria:" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+- id: ac-1" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+text: 'First criterion'" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+evidence: 'unit'" "$STUB_LOG"
+}
+
+@test "workflow.requirements.createTest typed params include acceptanceCriteria block when provided" {
+    # FR-MCP-REQACPLUGIN-001 / TEST-MCP-REQACPLUGIN-BASH: same as createFr but for the TEST kind.
+    write_requirements_state
+    source "$LIB"
+
+    run repl_invoke "workflow.requirements.createTest" "id: TEST-MCP-AC-100
+title: AC test create
+description: Condition body
+priority: high
+area: MCP
+acceptanceCriteria:
+  - id: ac-1
+    text: 'Test criterion'
+    isSatisfied: false"
+
+    [ "$status" -eq 0 ]
+    grep -q "method=client.Requirements.CreateTestAsync" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+acceptanceCriteria:" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+- id: ac-1" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+text: 'Test criterion'" "$STUB_LOG"
+}
+
+@test "workflow.requirements.updateFr typed params hydrate acceptanceCriteria from existing on partial update" {
+    # FR-MCP-REQACPLUGIN-001 / TEST-MCP-REQACPLUGIN-BASH: when the caller does not supply
+    # acceptanceCriteria, the plugin re-emits the criteria carried by the hydration source
+    # so a priority-only update does not wipe structured criteria.
+    write_requirements_state
+    export STUB_WORKFLOW_REQUIREMENTS_GET_WITH_AC=1
+    source "$LIB"
+
+    run repl_invoke "workflow.requirements.updateFr" "id: FR-MCP-AC-200
+priority: high"
+
+    unset STUB_WORKFLOW_REQUIREMENTS_GET_WITH_AC
+    [ "$status" -eq 0 ]
+    grep -q "method=client.Requirements.UpdateFrAsync" "$STUB_LOG"
+    # claude-code's typed updateFr arm only threads id/title/body (no priority); the
+    # AC-hydration assertion is what this test guards.
+    grep -Eq "input:[[:space:]]+acceptanceCriteria:" "$STUB_LOG"
+    grep -Eq "input:[[:space:]]+- id: existing-ac-1" "$STUB_LOG"
+}
+
+@test "workflow.requirements.copyAcceptanceCriteriaFromTodo wrapper hits copy endpoint" {
+    # FR-MCP-REQACPLUGIN-001 / TEST-MCP-REQACPLUGIN-BASH: the workflow wrapper exposes
+    # the server copy operation so agents can copy TODO acceptance criteria without raw REST.
+    write_requirements_state
+    export MCPSERVER_API_KEY="test-api-key"
+    source "$LIB"
+
+    run repl_invoke "workflow.requirements.copyAcceptanceCriteriaFromTodo" "kind: fr
+id: FR-MCP-AC-200
+todoId: TODO-AC-1"
+
+    unset MCPSERVER_API_KEY
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"copied":true'* ]]
+    grep -q "curl_method=POST" "$STUB_LOG"
+    grep -q "curl_url=http://127.0.0.1:8765/mcpserver/requirements/fr/FR-MCP-AC-200/acceptance-criteria/copy-from-todo" "$STUB_LOG"
+    grep -q "curl_header=X-Api-Key: test-api-key" "$STUB_LOG"
+    grep -q "curl_header=X-Workspace-Path: $SANDBOX/workspace" "$STUB_LOG"
+    grep -q 'curl_body={"todoId":"TODO-AC-1"}' "$STUB_LOG"
+}
 @test "workflow.requirements.generateDocument returns content through typed fallback" {
     write_requirements_state
     source "$LIB"
