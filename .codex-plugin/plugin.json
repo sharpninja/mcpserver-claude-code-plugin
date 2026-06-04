@@ -10,6 +10,7 @@
   "repository": "https://github.com/sharpninja/mcpserver-claude-code-plugin",
   "license": "MIT",
   "keywords": ["mcp", "session-log", "codex", "subagent", "todo", "requirements"],
+  "skillsPath": "skills",
   "hooks": {
     "sessionStart": [
       {
