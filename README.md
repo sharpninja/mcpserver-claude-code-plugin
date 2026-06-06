@@ -33,6 +33,18 @@ claude plugin install sharpninja/mcpserver-claude-code-plugin
 4. Opens an MCP session log and sets `MCP_WORKSPACE_PATH` for the REPL transport
 5. All subsequent operations go through `mcpserver-repl --agent-stdio`
 
+## Tool Name Surfaces
+
+This plugin's `workflow.sessionlog.*`, `workflow.todo.*`, and
+`workflow.requirements.*` names are plugin workflow/REPL method names invoked by
+the plugin skills and helpers. They are distinct from the native McpServer MCP
+tool names exposed by `/mcp-transport`, such as `sessionlog_*`, `todo_*`, and
+`requirements_*`, and from hosted-agent aliases such as `mcp_session_*`.
+
+Do not treat the absence of literal `workflow.*` names from generic MCP tool
+discovery as proof that this plugin is unavailable. Verify the plugin hooks,
+skills, marker trust, and `lib/repl-invoke.sh` path instead.
+
 ## Skills
 
 | Skill | Triggers | REPL Namespace |

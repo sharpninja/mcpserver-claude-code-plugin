@@ -13,6 +13,19 @@ All enforcement behaviors align with the canonical v4 shared core defined in:
 
 Every user message triggers the v4 three-phase enforcement protocol:
 
+## Tool Name Surfaces
+
+The enforcement scripts call `workflow.sessionlog.*`, `workflow.todo.*`, and
+`workflow.requirements.*` through `lib/repl-invoke.sh`. Those are plugin
+workflow/REPL method names, not literal native MCP tool names. Native McpServer
+MCP discovery uses names such as `sessionlog_*`, `todo_*`, and
+`requirements_*`; hosted-agent adapters may expose aliases such as
+`mcp_session_*`.
+
+Use plugin status, marker trust, hooks, and skill loading to validate this
+plugin. Do not search generic MCP discovery for literal `workflow.*` names and
+call the plugin unavailable solely because those names are absent.
+
 ### Phase 1 - Begin Turn (`UserPromptSubmit` hook)
 - `hooks/scripts/user-prompt-submit.sh` calls `workflow.sessionlog.beginTurn` via REPL
 - A `current-turn.yaml` file is written to the workspace cache so the Stop hook can verify completion
