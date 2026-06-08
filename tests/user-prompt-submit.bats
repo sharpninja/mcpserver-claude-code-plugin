@@ -25,6 +25,20 @@ EOF
 
     cat > "$SANDBOX/bin/mcpserver-repl" <<'EOF'
 #!/usr/bin/env bash
+payload="$(cat)"
+if grep -q 'workflow.memory.list' <<<"$payload"; then
+cat <<'YAML'
+type: result
+payload:
+  result:
+    items:
+    - id: MEMORY-REQ-001
+      text: Keep exact wording.
+    - id: MEMORY-USER-002
+      text: Preserve workspace preference.
+YAML
+exit 0
+fi
 printf 'type: response\npayload:\n  ok: true\n'
 EOF
     chmod +x "$SANDBOX/bin/mcpserver-repl"
@@ -49,6 +63,9 @@ teardown() {
     [ -f "$turn_file" ]
     grep -q '^status: in_progress' "$turn_file"
     grep -q '^turnRequestId: req-' "$turn_file"
+    grep -Fq "REQUIRED MEMORIES" <<<"$output"
+    grep -Fq "MEMORY-REQ-001: Keep exact wording." <<<"$output"
+    grep -Fq "MEMORY-USER-002: Preserve workspace preference." <<<"$output"
     grep -Fq "Use TODO and requirements tools only as needed." <<<"$output"
 }
 

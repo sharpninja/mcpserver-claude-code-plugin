@@ -42,6 +42,10 @@ if ! type repl_invoke >/dev/null 2>&1; then
     # shellcheck source=../../lib/repl-invoke.sh
     source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh" 2>/dev/null || true
 fi
+if ! type mcp_required_memory_context >/dev/null 2>&1; then
+    # shellcheck source=../../lib/memory-context.sh
+    source "$SCRIPT_PLUGIN_ROOT/lib/memory-context.sh" 2>/dev/null || true
+fi
 
 # Read stdin into PAYLOAD (may be empty)
 PAYLOAD="$(cat 2>/dev/null || true)"
@@ -132,14 +136,29 @@ INTERNAL_TODO_REMINDER="Use TODO and requirements tools only as needed."
 if type _repl_internal_todo_is_enabled >/dev/null 2>&1 && _repl_internal_todo_is_enabled; then
     INTERNAL_TODO_REMINDER="MCP-backed internal TODO tracking is enabled. Mirror durable plan items through workflow.todo.* and keep only transient execution details in the local checklist."
 fi
+if type mcp_required_memory_context >/dev/null 2>&1; then
+    REQUIRED_MEMORY_CONTEXT="$(mcp_required_memory_context)"
+else
+    REQUIRED_MEMORY_CONTEXT="$(printf 'REQUIRED MEMORIES\n- None.\n')"
+fi
 
 # Inject a per-turn reminder into Claude's context so the agent sees the
 # exact contract that applies to this turn. The stop-gate hook auto-closes
 # the turn via the plugin's own repl-invoke.sh shim — Claude is NOT expected
 # to invoke workflow.sessionlog.* (those verbs are not exposed as MCP tools).
-REMINDER="session log turn ${TURN_REQUEST_ID} is now active. ${INTERNAL_TODO_REMINDER} The stop-gate hook will auto-close the turn on finalize. PostToolUse/Write|Edit hooks auto-log actions. If you want richer action metadata, POST /mcpserver/sessionlog directly with the workspace API key from AGENTS-README-FIRST.yaml."
+REMINDER="$(cat <<EOF
+${REQUIRED_MEMORY_CONTEXT}
+
+session log turn ${TURN_REQUEST_ID} is now active. ${INTERNAL_TODO_REMINDER} The stop-gate hook will auto-close the turn on finalize. PostToolUse/Write|Edit hooks auto-log actions. If you want richer action metadata, POST /mcpserver/sessionlog directly with the workspace API key from AGENTS-README-FIRST.yaml.
+EOF
+)"
+if type mcp_json_escape >/dev/null 2>&1; then
+    REMINDER_JSON="$(mcp_json_escape "$REMINDER")"
+else
+    REMINDER_JSON="$REMINDER"
+fi
 
 printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","status":"turn-opened","turnRequestId":"%s","additionalContext":"%s"}}\n' \
     "$TURN_REQUEST_ID" \
-    "$REMINDER"
+    "$REMINDER_JSON"
 exit 0
