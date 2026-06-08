@@ -135,6 +135,7 @@ EOF
         # Run the script with mocked functions pre-exported
         source '$HOOKS_DIR/session-start.sh'
     "
+    [ "$output" = "{}" ]
     # The session state file should have been created
     [ -f "$TEST_PLUGIN_ROOT/cache/session-state.yaml" ]
     rm -rf "$TEST_PLUGIN_ROOT" "$TMPBIN"
@@ -158,6 +159,7 @@ EOF
         source '$HOOKS_DIR/session-start.sh'
     " || true
 
+    [ "$output" = "{}" ]
     state_file="$(find "$TEST_PLUGIN_ROOT/cache" -name session-state.yaml | head -1)"
     [ -f "$state_file" ]
     grep -q "MCP_UNTRUSTED" "$state_file"
@@ -199,6 +201,7 @@ EOF
         source '$HOOKS_DIR/session-end.sh'
     " || true
 
+    [ "$output" = "{}" ]
     [ -f "$FLUSH_CALLED" ]
     rm -rf "$TEST_PLUGIN_ROOT"
 }
@@ -243,6 +246,7 @@ EOF
         source '$HOOKS_DIR/pre-compact.sh'
     " || true
 
+    [ "$output" = "{}" ]
     [ -f "$FLUSH_CALLED" ]
     rm -rf "$TEST_PLUGIN_ROOT"
 }
@@ -263,7 +267,7 @@ EOF
     _assert_executable "$HOOKS_DIR/post-compact.sh"
 }
 
-@test "post-compact.sh outputs additionalContext in JSON" {
+@test "post-compact.sh emits schema-valid no-op JSON" {
     TEST_PLUGIN_ROOT="$(mktemp -d)"
     mkdir -p "$TEST_PLUGIN_ROOT/cache"
 
@@ -288,8 +292,8 @@ EOF
 
         source '$HOOKS_DIR/post-compact.sh'
     "
-    # Output should contain JSON with additionalContext key
-    [[ "$output" == *"additionalContext"* ]]
+    [ "$output" = "{}" ]
+    [[ "$output" != *"additionalContext"* ]]
     rm -rf "$TEST_PLUGIN_ROOT"
 }
 

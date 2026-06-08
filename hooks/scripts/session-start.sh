@@ -59,7 +59,7 @@ if [ -d "$LOCK_DIR" ]; then
     fi
 fi
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    printf '{"hookSpecificOutput":{"status":"degraded","reason":"session-start already running"}}\n'
+    printf '{}\n'
     exit 0
 fi
 trap 'rm -rf "$LOCK_DIR"' EXIT
@@ -73,7 +73,7 @@ fi
 if ! full_bootstrap 2>/dev/null; then
     _write_untrusted "Bootstrap failed"
     # Output minimal JSON so Claude Code doesn't error
-    printf '{"hookSpecificOutput":{"status":"MCP_UNTRUSTED"}}\n'
+    printf '{}\n'
     exit 0
 fi
 
@@ -110,9 +110,5 @@ baseUrl: "${MCPSERVER_BASE_URL:-}"
 timestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 EOF
 
-# Output JSON hookSpecificOutput with env vars for Claude Code to consume
-printf '{"hookSpecificOutput":{"status":"%s","sessionId":"%s","mcpWorkspacePath":"%s","mcpBaseUrl":"%s"}}\n' \
-    "$STATUS" \
-    "$SESSION_ID" \
-    "${MCPSERVER_WORKSPACE_PATH:-}" \
-    "${MCPSERVER_BASE_URL:-}"
+# Emit schema-valid no-op hook output.
+printf '{}\n'

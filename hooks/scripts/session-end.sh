@@ -45,4 +45,4 @@ fi
 # Clean up session state
 rm -f "$SESSION_STATE"
 
-printf '{"hookSpecificOutput":{"status":"completed","cacheFlush":"%s"}}\n' "$FLUSH_RESULT"
+printf '{}\n'

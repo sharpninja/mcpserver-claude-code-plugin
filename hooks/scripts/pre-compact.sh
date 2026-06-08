@@ -44,4 +44,4 @@ fi
 # Flush cache so no pending items are lost during compaction
 FLUSH_RESULT=$(cache_flush 2>/dev/null || echo "flushed=0 failed=0 pending=0")
 
-printf '{"hookSpecificOutput":{"status":"persisted","cacheFlush":"%s"}}\n' "$FLUSH_RESULT"
+printf '{}\n'
