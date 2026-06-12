@@ -84,7 +84,6 @@ Repository: `F:\GitHub\mcpserver-claude-code-plugin`
 Primary files:
 
 - `.claude-plugin`
-- `.mcp.json`
 - `hooks/hooks.json`
 - `hooks/scripts/session-start.sh`
 - `hooks/scripts/user-prompt-submit.sh`
@@ -208,10 +207,9 @@ Codex checks:
 Claude Code checks:
 
 1. `hooks/hooks.json` is valid JSON.
-2. `.mcp.json` is valid JSON.
-3. Hook commands point to real scripts.
-4. Shell and PowerShell helper pairs exist where expected.
-5. Skill references point to real files.
+2. Hook commands point to real scripts.
+3. Shell and PowerShell helper pairs exist where expected.
+4. Skill references point to real files.
 
 Copilot checks:
 
