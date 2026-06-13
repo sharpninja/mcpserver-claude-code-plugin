@@ -14,7 +14,25 @@ fi
 
 # Re-resolve on each call: CWD / env may shift between invocations.
 _cache_manager_cache_dir() { resolve_cache_dir; }
-_cache_manager_pending_dir() { printf '%s/pending' "$(_cache_manager_cache_dir)"; }
+
+# Pending writes are scoped per MCP session when MCP_SESSION_ID is set
+# (concept from codex commit 2f42e28), layered on the workspace-anchored
+# cache dir resolved above rather than the plugin install dir.
+_cache_manager_pending_dir() {
+    local base
+    base="$(_cache_manager_cache_dir)"
+    if [ -n "${MCP_SESSION_ID:-}" ]; then
+        if ! type cache_scope_session_key >/dev/null 2>&1 && [ -f "$CACHE_MANAGER_SCRIPT_DIR/cache-scope.sh" ]; then
+            # shellcheck source=./cache-scope.sh
+            source "$CACHE_MANAGER_SCRIPT_DIR/cache-scope.sh" 2>/dev/null || true
+        fi
+        if type cache_scope_session_key >/dev/null 2>&1; then
+            printf '%s/sessions/%s/pending' "$base" "$(cache_scope_session_key "$MCP_SESSION_ID")"
+            return 0
+        fi
+    fi
+    printf '%s/pending' "$base"
+}
 
 _ensure_cache_dirs() {
     mkdir -p "$(_cache_manager_pending_dir)"

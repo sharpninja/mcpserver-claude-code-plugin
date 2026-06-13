@@ -116,6 +116,8 @@ verify_signature() {
         fi
     done < "$marker_file"
 
+    # Include the signed agent plugin contract digest when present. Older
+    # markers do not have agent_plugins and remain valid without these lines.
     local agent_plugins_policy agent_plugins_digest
     agent_plugins_policy=$(sed -n '/^agent_plugins:/,/^[^ ]/p' "$marker_file" 2>/dev/null \
         | grep "^[[:space:]]*policy:" \

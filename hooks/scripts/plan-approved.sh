@@ -1,66 +1,10 @@
 #!/usr/bin/env bash
-# plan-approved.sh — PostToolUse/ExitPlanMode hook.
-# Reads the approved plan file, extracts the title from the first # heading,
-# creates a TODO via repl_invoke, and records the mapping in cache/plan-todo-map.yaml.
+# plan-approved.sh - generated McpServer plugin hook wrapper (claude-code).
+# Generated from plugins/core/hooks-templates; do not edit in the plugin repo.
+# All logic lives in lib/hook-lib.sh; host knobs live in lib/plugin-env.sh.
 set -uo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
-if ! type resolve_cache_dir >/dev/null 2>&1; then
-    # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
-fi
-CACHE_DIR="$(resolve_cache_dir)"
-PLAN_MAP="$CACHE_DIR/plan-todo-map.yaml"
-
-# Source libraries if not already loaded
-if ! type repl_invoke >/dev/null 2>&1; then
-    # shellcheck source=../../lib/repl-invoke.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
-fi
-
-# Resolve plan file path from TOOL_INPUT or first argument
-PLAN_FILE="${TOOL_INPUT:-${1:-}}"
-
-if [ -z "$PLAN_FILE" ] || [ ! -f "$PLAN_FILE" ]; then
-    # Nothing to do — no plan file provided
-    printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"skipped","reason":"no plan file"}}\n'
-    exit 0
-fi
-
-# Extract title from first # heading
-PLAN_TITLE=$(grep -m1 '^# ' "$PLAN_FILE" 2>/dev/null | sed 's/^# //' || true)
-
-if [ -z "$PLAN_TITLE" ]; then
-    PLAN_TITLE="$(basename "$PLAN_FILE" .md)"
-fi
-
-# Create TODO via REPL
-TODO_PARAMS="title: ${PLAN_TITLE}
-source: plan
-planFile: ${PLAN_FILE}"
-
-TODO_RESPONSE=$(repl_invoke "todo.create" "$TODO_PARAMS" 2>/dev/null || echo "")
-
-# Extract todo ID from response
-TODO_ID=$(echo "$TODO_RESPONSE" | grep '^id:' | head -1 | sed 's/^id:[[:space:]]*//' || echo "")
-
-# Persist the plan -> todo mapping
-mkdir -p "$CACHE_DIR"
-if [ ! -f "$PLAN_MAP" ]; then
-    cat > "$PLAN_MAP" << 'YAML'
-entries: []
-YAML
-fi
-
-# Append the new entry
-cat >> "$PLAN_MAP" << YAML
-  - planFile: ${PLAN_FILE}
-    todoId: ${TODO_ID}
-    title: ${PLAN_TITLE}
-    createdAt: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-YAML
-
-printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","status":"created","todoId":"%s","title":"%s"}}\n' \
-    "$TODO_ID" "$PLAN_TITLE"
+. "$SCRIPT_DIR/../../lib/plugin-env.sh"
+. "$SCRIPT_DIR/../../lib/hook-lib.sh"
+hook_env_init flat
+plan_approved_main "$@"

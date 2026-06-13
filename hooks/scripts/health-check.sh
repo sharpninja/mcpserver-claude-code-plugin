@@ -1,22 +1,10 @@
 #!/usr/bin/env bash
-# health-check.sh — Verify McpServer connectivity via the REPL bootstrap method.
-# Exits 0 if the server responds, exits 1 on any failure.
+# health-check.sh - generated McpServer plugin hook wrapper (claude-code).
+# Generated from plugins/core/hooks-templates; do not edit in the plugin repo.
+# All logic lives in lib/hook-lib.sh; host knobs live in lib/plugin-env.sh.
 set -uo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
-
-# Source repl-invoke if not already loaded
-if ! type repl_invoke >/dev/null 2>&1; then
-    # shellcheck source=../../lib/repl-invoke.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
-fi
-
-if repl_invoke "workflow.sessionlog.bootstrap" "" >/dev/null 2>&1; then
-    echo "health: ok"
-    exit 0
-else
-    echo "health: failed" >&2
-    exit 1
-fi
+. "$SCRIPT_DIR/../../lib/plugin-env.sh"
+. "$SCRIPT_DIR/../../lib/hook-lib.sh"
+hook_env_init flat
+health_check_main "$@"

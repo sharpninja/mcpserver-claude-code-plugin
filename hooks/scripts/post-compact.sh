@@ -1,25 +1,10 @@
 #!/usr/bin/env bash
-# post-compact.sh — PostCompact hook for the McpServer Claude Code plugin.
-# Re-verifies the marker signature after compaction without emitting
-# unsupported PostCompact context.
+# post-compact.sh - generated McpServer plugin hook wrapper (claude-code).
+# Generated from plugins/core/hooks-templates; do not edit in the plugin repo.
+# All logic lives in lib/hook-lib.sh; host knobs live in lib/plugin-env.sh.
 set -uo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
-
-# Source libraries if not already loaded
-if ! type full_bootstrap >/dev/null 2>&1; then
-    # shellcheck source=../../lib/marker-resolver.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/marker-resolver.sh"
-fi
-
-
-# Re-verify the marker after compaction
-if ! full_bootstrap 2>/dev/null; then
-    printf '{}\n'
-    exit 0
-fi
-
-# PostCompact cannot inject context; emit schema-valid no-op output.
-printf '{}\n'
+. "$SCRIPT_DIR/../../lib/plugin-env.sh"
+. "$SCRIPT_DIR/../../lib/hook-lib.sh"
+hook_env_init flat
+post_compact_main "$@"

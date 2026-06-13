@@ -100,7 +100,7 @@ function Test-MarkerSignature {
     $baseUrl = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'baseUrl'
     $workspace = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'workspace'
     $workspacePath = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'workspacePath'
-    $pid = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'pid'
+    $markerPid = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'pid'
     $startedAt = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'startedAt'
     $markerWrittenAtUtc = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'markerWrittenAtUtc'
     $serverStartedAtUtc = Get-MarkerField -MarkerFile $MarkerFile -FieldName 'serverStartedAtUtc'
@@ -112,7 +112,7 @@ function Test-MarkerSignature {
     $payload += "apiKey=$apiKey`n"
     $payload += "workspace=$workspace`n"
     $payload += "workspacePath=$workspacePath`n"
-    $payload += "pid=$pid`n"
+    $payload += "pid=$markerPid`n"
     $payload += "startedAt=$startedAt`n"
     $payload += "markerWrittenAtUtc=$markerWrittenAtUtc`n"
     $payload += "serverStartedAtUtc=$serverStartedAtUtc`n"

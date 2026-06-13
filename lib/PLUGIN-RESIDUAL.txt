@@ -1,0 +1,3 @@
+lib/Invoke-ClaudeMcpPlugin.ps1
+lib/mcp.claude.status.sh
+lib/plugin-env.sh

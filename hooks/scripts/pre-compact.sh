@@ -1,47 +1,10 @@
 #!/usr/bin/env bash
-# pre-compact.sh — PreCompact hook for the McpServer Claude Code plugin.
-# Persists the current session log turn and flushes the write cache before
-# Claude Code performs a context compaction.
+# pre-compact.sh - generated McpServer plugin hook wrapper (claude-code).
+# Generated from plugins/core/hooks-templates; do not edit in the plugin repo.
+# All logic lives in lib/hook-lib.sh; host knobs live in lib/plugin-env.sh.
 set -uo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPT_PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_PLUGIN_ROOT}"
-if ! type resolve_cache_dir >/dev/null 2>&1; then
-    # shellcheck source=../../lib/resolve-cache-dir.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/resolve-cache-dir.sh"
-fi
-CACHE_DIR="$(resolve_cache_dir)"
-SESSION_STATE="$CACHE_DIR/session-state.yaml"
-
-# Source libraries if not already loaded
-if ! type repl_invoke >/dev/null 2>&1; then
-    # shellcheck source=../../lib/repl-invoke.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/repl-invoke.sh"
-fi
-
-if ! type cache_flush >/dev/null 2>&1; then
-    # shellcheck source=../../lib/cache-manager.sh
-    source "$SCRIPT_PLUGIN_ROOT/lib/cache-manager.sh"
-fi
-
-# Read session state
-SESSION_ID=""
-if [ -f "$SESSION_STATE" ]; then
-    SESSION_ID=$(grep '^sessionId:' "$SESSION_STATE" 2>/dev/null | sed 's/^sessionId:[[:space:]]*//' || true)
-fi
-
-# Update the session turn with compaction tag before compacting
-if [ -n "$SESSION_ID" ]; then
-    UPDATE_PARAMS="agent: ClaudeCode
-sessionId: ${SESSION_ID}
-tags:
-  - pre-compact
-status: persisting"
-    repl_invoke "workflow.sessionlog.updateTurn" "$UPDATE_PARAMS" >/dev/null 2>&1 || true
-fi
-
-# Flush cache so no pending items are lost during compaction
-FLUSH_RESULT=$(cache_flush 2>/dev/null || echo "flushed=0 failed=0 pending=0")
-
-printf '{}\n'
+. "$SCRIPT_DIR/../../lib/plugin-env.sh"
+. "$SCRIPT_DIR/../../lib/hook-lib.sh"
+hook_env_init flat
+pre_compact_main "$@"

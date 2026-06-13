@@ -117,22 +117,157 @@ function Invoke-ReplRaw {
     }
 }
 
-function Invoke-ReplPersistTurn {
+function Get-ReplSessionStateValue {
+    # PowerShell twin of _repl_session_state_value: first scalar for a
+    # top-level key in session-state.yaml.
+    param([Parameter(Mandatory)][string]$Key)
+    $f = Join-Path (Get-ReplInvokeCacheDir) 'session-state.yaml'
+    if (-not (Test-Path $f)) { return '' }
+    $line = Select-String -Path $f -Pattern "^${Key}:" | Select-Object -First 1
+    if (-not $line) { return '' }
+    return ($line.Line -replace "^${Key}:\s*", '').Trim()
+}
+
+function Get-ReplCurrentTurnValue {
+    param([Parameter(Mandatory)][string]$Key)
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
+    if (-not (Test-Path $turnFile)) { return '' }
+    $line = Select-String -Path $turnFile -Pattern "^${Key}:" | Select-Object -First 1
+    if (-not $line) { return '' }
+    return ($line.Line -replace "^${Key}:\s*", '').Trim()
+}
+
+function Get-ReplCurrentTurnQueryText {
+    # Extract the queryText literal block from current-turn.yaml (twin of
+    # _repl_yaml_block_get for the one block the upsert path needs).
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
+    if (-not (Test-Path $turnFile)) { return '' }
+    $text = Get-Content -Path $turnFile -Raw
+    if ($text -match '(?ms)^queryText:\s*\|\s*\r?\n(.*?)(?=^\S|\z)') {
+        $block = $Matches[1]
+        $lines = $block -split "`n" | ForEach-Object { $_ -replace '^\s{0,4}', '' }
+        return (($lines -join "`n").TrimEnd())
+    }
+    return ''
+}
+
+function Get-ReplFailsafeDir {
+    if ($env:MCPSERVER_FAILSAFE_DIR) { return $env:MCPSERVER_FAILSAFE_DIR }
+    if ($env:MCP_FAILSAFE_DIR) { return $env:MCP_FAILSAFE_DIR }
+    return (Join-Path (Get-ReplInvokeCacheDir) 'failsafe')
+}
+
+function Write-ReplFailsafe {
+    # Twin of _repl_failsafe_write: capture the payload before attempting the
+    # remote call so a crash cannot lose the turn. Returns the failsafe path.
     param(
+        [Parameter(Mandatory)][string]$Method,
+        [Parameter(Mandatory)][string]$ParamsYaml,
+        [Parameter(Mandatory)][string]$Label
+    )
+    try {
+        $dir = Get-ReplFailsafeDir
+        [void][System.IO.Directory]::CreateDirectory($dir)
+        $stamp = Get-Date -AsUTC -Format 'yyyyMMddTHHmmssZ'
+        $file = Join-Path $dir ("{0}-{1}-{2:x4}.yaml" -f $stamp, $Label, (Get-Random -Maximum 0xFFFF))
+        $doc = "method: $Method`nlabel: $Label`ntimestamp: $stamp`nparams:`n"
+        $doc += (($ParamsYaml -split "`n" | ForEach-Object { "  $_" }) -join "`n") + "`n"
+        Set-Content -Path $file -Value $doc -NoNewline
+        return $file
+    }
+    catch {
+        return ''
+    }
+}
+
+function Clear-ReplFailsafe {
+    param([string]$Path)
+    if ($Path -and (Test-Path $Path)) {
+        Remove-Item -Path $Path -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-ReplTurnUpsertParams {
+    # Twin of _repl_turn_upsert_params: agent/sessionId/turn document for
+    # client.SessionLog.UpsertTurnAsync.
+    param(
+        [Parameter(Mandatory)][string]$SourceType,
+        [Parameter(Mandatory)][string]$SessionId,
         [Parameter(Mandatory)][string]$RequestId,
         [Parameter(Mandatory)][string]$Title,
         [Parameter(Mandatory)][string]$Status,
         [string]$ResponseText = '',
         [string]$ActionsYaml = ''
     )
-    $meta = Get-ReplSessionMeta
-    if (-not $meta) { return $false }
+
+    $queryText = Get-ReplCurrentTurnQueryText
+    if (-not $queryText) { $queryText = $Title }
+    $timestamp = Get-ReplCurrentTurnValue -Key 'openedAt'
+    if (-not $timestamp) { $timestamp = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ") }
+    $model = Get-ReplSessionStateValue -Key 'model'
+    if (-not $model) {
+        $model = if ($env:MCP_SESSION_MODEL) { $env:MCP_SESSION_MODEL }
+                 elseif ($env:PLUGIN_MODEL_DEFAULT) { $env:PLUGIN_MODEL_DEFAULT }
+                 else { 'codex' }
+    }
+
+    $queryLines = ($queryText -split "`n" | ForEach-Object { "    $_" }) -join "`n"
+    $respLines = ($ResponseText -split "`n" | ForEach-Object { "    $_" }) -join "`n"
+
+    $filesModifiedBlock = ''
+    if ($ActionsYaml) {
+        $filePaths = [regex]::Matches($ActionsYaml, '(?m)^\s*filePath:\s*(.+)$') |
+            ForEach-Object { $_.Groups[1].Value.Trim() } | Where-Object { $_ }
+        if ($filePaths) {
+            $filesModifiedBlock = "  filesModified:`n" +
+                (($filePaths | ForEach-Object { "    - $_" }) -join "`n")
+        }
+    }
+
+    $actionsSection = ''
+    if ($ActionsYaml) {
+        $actionsSection = "  actions:`n" +
+            (($ActionsYaml -split "`n" | ForEach-Object { "    $_" }) -join "`n")
+    }
+
+    $doc = @"
+agent: $SourceType
+sessionId: $SessionId
+turn:
+  requestId: $RequestId
+  timestamp: $timestamp
+  queryText: |
+$queryLines
+  queryTitle: $Title
+  response: |
+$respLines
+  status: $Status
+  model: $model
+  tokenCount: !!int 0
+"@
+    if ($filesModifiedBlock) { $doc += "`n$filesModifiedBlock" }
+    if ($actionsSection) { $doc += "`n$actionsSection" }
+    return $doc
+}
+
+function Invoke-ReplSubmitSessionFallback {
+    # Pre-upsert behavior: build the full sessionLog envelope and submit via
+    # client.SessionLog.SubmitAsync. Used only when UpsertTurnAsync is
+    # missing on the server (method_not_found).
+    param(
+        [Parameter(Mandatory)][pscustomobject]$Meta,
+        [Parameter(Mandatory)][string]$RequestId,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][string]$Status,
+        [string]$ResponseText = '',
+        [string]$ActionsYaml = ''
+    )
 
     $respLines = ($ResponseText -split "`n" | ForEach-Object { "      $_" }) -join "`n"
     $params = @"
 sessionLog:
-  sourceType: $($meta.SourceType)
-  sessionId: $($meta.SessionId)
+  sourceType: $($Meta.SourceType)
+  sessionId: $($Meta.SessionId)
   title: $Title
   status: in_progress
   turns:
@@ -149,6 +284,42 @@ $respLines
 
     $r = Invoke-ReplRaw -Method 'client.SessionLog.SubmitAsync' -ParamsYaml $params
     return $r.Success
+}
+
+function Invoke-ReplPersistTurn {
+    # Persist the turn via client.SessionLog.UpsertTurnAsync with a failsafe
+    # capture first, falling back to full-session SubmitAsync only when the
+    # upsert method is missing (sh twin: _repl_persist_turn, commit 97aab2d).
+    param(
+        [Parameter(Mandatory)][string]$RequestId,
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][string]$Status,
+        [string]$ResponseText = '',
+        [string]$ActionsYaml = ''
+    )
+    $meta = Get-ReplSessionMeta
+    if (-not $meta) { return $false }
+
+    $turnParams = Invoke-ReplTurnUpsertParams -SourceType $meta.SourceType `
+        -SessionId $meta.SessionId -RequestId $RequestId -Title $Title `
+        -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml
+
+    $failsafe = Write-ReplFailsafe -Method 'client.SessionLog.UpsertTurnAsync' `
+        -ParamsYaml $turnParams -Label 'session_upsertTurn'
+
+    $r = Invoke-ReplRaw -Method 'client.SessionLog.UpsertTurnAsync' -ParamsYaml $turnParams
+    if ($r.Success) {
+        Clear-ReplFailsafe -Path $failsafe
+        return $true
+    }
+
+    if ($r.Output -match 'method_not_found') {
+        Clear-ReplFailsafe -Path $failsafe
+        return (Invoke-ReplSubmitSessionFallback -Meta $meta -RequestId $RequestId `
+            -Title $Title -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml)
+    }
+
+    return $false
 }
 
 function Update-ReplTurnCacheStatus {
