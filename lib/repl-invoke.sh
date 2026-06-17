@@ -375,7 +375,10 @@ _repl_schema_validate_method() {
             _repl_schema_require_any_text "$method" "$params_yaml" "description" "body" || return 1
             _repl_schema_require_text "$method" "$params_yaml" "priority" || return 1
             _repl_schema_require_text "$method" "$params_yaml" "area" || return 1
-            _repl_schema_require_text "$method" "$params_yaml" "subarea" || return 1
+            # subarea is NOT a CreateTrRequest field and is never sent to the server; the TR id itself
+            # carries the subarea segment and the server enforces TR-<AREA>-<SUBAREA>-### structure.
+            # Requiring a separate subarea param here was inconsistent with createFr/createTest and
+            # silently blocked every createTr that followed the FR/TEST shape.
             ;;
         workflow.requirements.createTest|client.Requirements.CreateTestAsync)
             _repl_schema_require_text "$method" "$params_yaml" "id" || return 1
