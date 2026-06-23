@@ -31,6 +31,12 @@ $script:ReplInvokePluginRoot = if ($env:PLUGIN_ROOT_OVERRIDE) {
     Split-Path -Parent $PSScriptRoot
 }
 
+# Agent for per-agent REPL cache and isolation. Must be passed to every mcpserver-repl call.
+$script:AgentName = if ($env:MCP_AGENT_NAME) { $env:MCP_AGENT_NAME }
+                   elseif ($env:PLUGIN_AGENT_NAME) { $env:PLUGIN_AGENT_NAME }
+                   elseif ($env:PLUGIN_AGENT_DEFAULT) { $env:PLUGIN_AGENT_DEFAULT }
+                   else { 'default' }
+
 if (-not (Get-Command Resolve-McpCacheDir -ErrorAction SilentlyContinue)) {
     . (Join-Path $PSScriptRoot 'resolve-cache-dir.ps1')
 }
@@ -63,14 +69,44 @@ function Invoke-ReplRaw {
     $requestId = "req-$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssZ')-$((Get-Random -Maximum 0xFFFF).ToString('x4'))"
     $timeout = if ($env:REPL_TIMEOUT) { [int]$env:REPL_TIMEOUT } else { 30 }
 
-    $envelope = "type: request`npayload:`n  requestId: $requestId`n  method: $Method"
+    # Build as object then serialize to JSON (no manual YAML text construction).
+    # Consistent with bash (node) and node transport.
     if ($ParamsYaml) {
-        $indented = ($ParamsYaml -split "`n" | ForEach-Object { "    $_" }) -join "`n"
-        $envelope += "`n  params:`n$indented"
+        $ParamsYaml = $ParamsYaml -replace "`r`n", "`n" -replace "`r", ""
+        $p = $null
+        if ($ParamsYaml -match '^\s*[\{\[]') {
+            try { $p = $ParamsYaml | ConvertFrom-Json -ErrorAction Stop } catch { $p = $ParamsYaml }
+        } else {
+            $p = $ParamsYaml
+        }
+        $envObj = [ordered]@{
+            type = 'request'
+            payload = [ordered]@{
+                requestId = $requestId
+                method = $Method
+            }
+        }
+        if ($p) { $envObj.payload.params = $p }
+        $envelope = $envObj | ConvertTo-Json -Depth 20 -Compress
+    } else {
+        $envObj = [ordered]@{
+            type = 'request'
+            payload = [ordered]@{
+                requestId = $requestId
+                method = $Method
+            }
+        }
+        $envelope = $envObj | ConvertTo-Json -Depth 20 -Compress
     }
 
     try {
-        $psi = [System.Diagnostics.ProcessStartInfo]::new('mcpserver-repl', '--agent-stdio')
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = 'mcpserver-repl'
+        $psi.ArgumentList.Add('--agent-stdio')
+        if ($script:AgentName -and $script:AgentName -ne 'default') {
+            $psi.ArgumentList.Add('--agent')
+            $psi.ArgumentList.Add($script:AgentName)
+        }
         $psi.RedirectStandardInput = $true
         $psi.RedirectStandardOutput = $true
         # Do NOT redirect stderr: mcpserver-repl logs verbose 'info:' lines
@@ -84,7 +120,15 @@ function Invoke-ReplRaw {
         $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 
         $proc = [System.Diagnostics.Process]::Start($psi)
-        $proc.StandardInput.WriteLine($envelope)
+        $envFile = Join-Path (Get-ReplInvokeCacheDir) "envelope-$requestId.tmp"
+        [System.IO.File]::WriteAllText($envFile, $envelope, [System.Text.Encoding]::UTF8)
+        try {
+            $fs = [System.IO.File]::OpenRead($envFile)
+            $fs.CopyTo($proc.StandardInput.BaseStream)
+            $fs.Close()
+        } finally {
+            Remove-Item $envFile -ErrorAction SilentlyContinue
+        }
         $proc.StandardInput.Close()
 
         # Drain stdout BEFORE waiting for exit. With a redirected pipe, the
@@ -188,8 +232,8 @@ function Clear-ReplFailsafe {
 }
 
 function Invoke-ReplTurnUpsertParams {
-    # Twin of _repl_turn_upsert_params: agent/sessionId/turn document for
-    # client.SessionLog.UpsertTurnAsync.
+    # Build as object, will be serialized to JSON in the caller (no text YAML).
+    # This eliminates indentation and block-scalar errors.
     param(
         [Parameter(Mandatory)][string]$SourceType,
         [Parameter(Mandatory)][string]$SessionId,
@@ -211,43 +255,55 @@ function Invoke-ReplTurnUpsertParams {
                  else { 'codex' }
     }
 
-    $queryLines = ($queryText -split "`n" | ForEach-Object { "    $_" }) -join "`n"
-    $respLines = ($ResponseText -split "`n" | ForEach-Object { "    $_" }) -join "`n"
-
-    $filesModifiedBlock = ''
+    $filePaths = @()
     if ($ActionsYaml) {
         $filePaths = [regex]::Matches($ActionsYaml, '(?m)^\s*filePath:\s*(.+)$') |
             ForEach-Object { $_.Groups[1].Value.Trim() } | Where-Object { $_ }
-        if ($filePaths) {
-            $filesModifiedBlock = "  filesModified:`n" +
-                (($filePaths | ForEach-Object { "    - $_" }) -join "`n")
-        }
     }
 
-    $actionsSection = ''
+    $actions = @()
     if ($ActionsYaml) {
-        $actionsSection = "  actions:`n" +
-            (($ActionsYaml -split "`n" | ForEach-Object { "    $_" }) -join "`n")
+        # Simple parse of the actions block into objects (for JSON serialization)
+        $lines = $ActionsYaml -split "`n"
+        $cur = $null
+        foreach ($l in $lines) {
+            $t = $l.Trim()
+            if ($t -match '^-') {
+                if ($cur) { $actions += $cur }
+                $cur = @{}
+                if ($t -match 'type:\s*(.+)$') { $cur.type = ($Matches[1] -replace '^["'']|["'']$','').Trim() }
+            } elseif ($cur -and $t -match '^(\w+):\s*(.+)$') {
+                $k = $Matches[1]
+                $v = ($Matches[2] -replace '^["'']|["'']$','').Trim()
+                $cur[$k] = $v
+            }
+        }
+        if ($cur) { $actions += $cur }
     }
 
-    $doc = @"
-agent: $SourceType
-sessionId: $SessionId
-turn:
-  requestId: $RequestId
-  timestamp: $timestamp
-  queryText: |
-$queryLines
-  queryTitle: $Title
-  response: |
-$respLines
-  status: $Status
-  model: $model
-  tokenCount: !!int 0
-"@
-    if ($filesModifiedBlock) { $doc += "`n$filesModifiedBlock" }
-    if ($actionsSection) { $doc += "`n$actionsSection" }
-    return $doc
+    $turn = [ordered]@{
+        requestId = $RequestId
+        timestamp = $timestamp
+        queryText = $queryText
+        queryTitle = $Title
+        response = $ResponseText
+        status = $Status
+        model = $model
+        tokenCount = 0
+    }
+    if ($filePaths.Count -gt 0) {
+        $turn.filesModified = $filePaths
+    }
+    if ($actions.Count -gt 0) {
+        $turn.actions = $actions
+    }
+
+    $obj = [ordered]@{
+        agent = $SourceType
+        sessionId = $SessionId
+        turn = $turn
+    }
+    return $obj
 }
 
 function Invoke-ReplSubmitSessionFallback {
@@ -300,26 +356,62 @@ function Invoke-ReplPersistTurn {
     $meta = Get-ReplSessionMeta
     if (-not $meta) { return $false }
 
-    $turnParams = Invoke-ReplTurnUpsertParams -SourceType $meta.SourceType `
+    $turnObj = Invoke-ReplTurnUpsertParams -SourceType $meta.SourceType `
         -SessionId $meta.SessionId -RequestId $RequestId -Title $Title `
         -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml
 
+    $envelope = [ordered]@{
+        type = "request"
+        payload = [ordered]@{
+            requestId = "req-$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssZ')-$(Get-Random -Maximum 0xffff)"
+            method = "client.SessionLog.UpsertTurnAsync"
+            params = $turnObj
+        }
+    }
+    $jsonEnvelope = $envelope | ConvertTo-Json -Depth 10 -Compress
+
     $failsafe = Write-ReplFailsafe -Method 'client.SessionLog.UpsertTurnAsync' `
-        -ParamsYaml $turnParams -Label 'session_upsertTurn'
+        -ParamsYaml $jsonEnvelope -Label 'session_upsertTurn'
 
-    $r = Invoke-ReplRaw -Method 'client.SessionLog.UpsertTurnAsync' -ParamsYaml $turnParams
-    if ($r.Success) {
-        Clear-ReplFailsafe -Path $failsafe
-        return $true
+    # Send as JSON envelope (reliable serialization, no manual YAML text)
+    $tmp = Join-Path (Get-ReplInvokeCacheDir) "envelope-$RequestId.json"
+    [System.IO.File]::WriteAllText($tmp, $jsonEnvelope, [System.Text.Encoding]::UTF8)
+    try {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = 'mcpserver-repl'
+        $psi.ArgumentList.Add('--agent-stdio')
+        if ($script:AgentName -and $script:AgentName -ne 'default') {
+            $psi.ArgumentList.Add('--agent'); $psi.ArgumentList.Add($script:AgentName)
+        }
+        $psi.RedirectStandardInput = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $fs = [System.IO.File]::OpenRead($tmp)
+        $fs.CopyTo($proc.StandardInput.BaseStream)
+        $fs.Close()
+        $proc.StandardInput.Close()
+        $outTask = $proc.StandardOutput.ReadToEndAsync()
+        $outTask.Wait(30000) | Out-Null
+        $output = $outTask.Result
+        $proc.WaitForExit()
+        $output = $output -replace "[\uFEFF]", ''
+        $isErr = $output -match '(?m)^type:\s*error\b'
+        if ($proc.ExitCode -eq 0 -and -not $isErr) {
+            Clear-ReplFailsafe -Path $failsafe
+            return $true
+        }
+        if ($output -match 'method_not_found') {
+            Clear-ReplFailsafe -Path $failsafe
+            return (Invoke-ReplSubmitSessionFallback -Meta $meta -RequestId $RequestId `
+                -Title $Title -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml)
+        }
+        return $false
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
     }
-
-    if ($r.Output -match 'method_not_found') {
-        Clear-ReplFailsafe -Path $failsafe
-        return (Invoke-ReplSubmitSessionFallback -Meta $meta -RequestId $RequestId `
-            -Title $Title -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml)
-    }
-
-    return $false
 }
 
 function Update-ReplTurnCacheStatus {
@@ -364,24 +456,106 @@ function Get-ReplTurnCacheField {
     return ($line.Line -replace "^${Field}:\s*", '').Trim()
 }
 
+function Get-ReplNormalizedActionsBlock {
+    # Returns bare list content under the 'actions:' key (common indent stripped).
+    # Twin of _repl_normalized_actions_block + _repl_list_block_get.
+    # Safe for map-style turn docs (preserves nesting) and top-level actions: lists.
+    param([string]$ParamsYaml)
+    if (-not $ParamsYaml) { return '' }
+    $text = $ParamsYaml -replace "`r`n", "`n" -replace "`r", ""
+    $lines = $text -split "`n"
+    $capture = $false
+    $keyIndent = -1
+    $stripIndent = -1
+    $result = @()
+    foreach ($line in $lines) {
+        if (-not $capture) {
+            if ($line -match '^\s*actions:\s*$') {
+                $capture = $true
+                $m = [regex]::Match($line, '^(\s*)')
+                $keyIndent = $m.Groups[1].Value.Length
+                continue
+            }
+            continue
+        }
+        if ($line -match '^\s*$') {
+            $result += $line
+            continue
+        }
+        $m = [regex]::Match($line, '^(\s*)')
+        $lineIndent = $m.Groups[1].Value.Length
+        if ($lineIndent -le $keyIndent -and $line -notmatch '^\s*-') {
+            break
+        }
+        if ($stripIndent -lt 0) { $stripIndent = $lineIndent }
+        if ($stripIndent -gt 0 -and $line.Length -ge $stripIndent) {
+            $result += $line.Substring($stripIndent)
+        } else {
+            $result += $line
+        }
+    }
+    return ($result -join "`n").TrimEnd()
+}
+
+function Update-ReplTurnAudit {
+    param([Parameter(Mandatory)][string]$Field, [int]$Increment = 0)
+    if ($Increment -le 0) { return $false }
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
+    if (-not (Test-Path $turnFile)) { return $false }
+    $lines = Get-Content -Path $turnFile
+    $current = 0
+    foreach ($l in $lines) {
+        if ($l -match "^${Field}:\s*(\d+)") {
+            $current = [int]$Matches[1]
+            break
+        }
+    }
+    $new = $current + $Increment
+    $found = $false
+    $updated = $lines | ForEach-Object {
+        if ($_ -match "^${Field}:") { $found = $true; "${Field}: $new" } else { $_ }
+    }
+    if (-not $found) {
+        # append if field missing (defensive; init should have written audits)
+        $updated += "${Field}: $new"
+    }
+    Set-Content -Path $turnFile -Value ($updated -join "`n") -NoNewline:$false
+    return $true
+}
+
 function Invoke-WorkflowAppendActions {
     param([string]$ParamsYaml)
     $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
     if (-not (Test-Path $turnFile)) { return $true }
 
     $added = 0
+    $actionsBlock = ''
     if ($ParamsYaml) {
-        $added = ([regex]::Matches($ParamsYaml, '(?m)^\s*filePath:\s*\S')).Count
+        $p = $ParamsYaml -replace "`r`n", "`n" -replace "`r", ""
+        $actionsBlock = Get-ReplNormalizedActionsBlock -ParamsYaml $p
+        # Count only real filePath: fields (with value) for codeEdits. Substring matches in
+        # descriptions must be ignored. Non-file actions (design_decision etc.) must persist.
+        $added = ([regex]::Matches($p, '(?m)^\s*filePath:\s*\S')).Count
     }
-    if ($added -le 0) { return $true }
 
-    Update-ReplTurnCacheEdits -Increment $added | Out-Null
+    if ($ParamsYaml -and $ParamsYaml.Trim()) {
+        if ($added -gt 0) {
+            Update-ReplTurnCacheEdits -Increment $added | Out-Null
+        }
+        $actionC = ([regex]::Matches($ParamsYaml, '(?m)^\s*type:')).Count
+        $decC = ([regex]::Matches($ParamsYaml, '(?m)^\s*type:\s*design_decision\b')).Count
+        $comC = ([regex]::Matches($ParamsYaml, '(?m)^\s*type:\s*commit\b')).Count
+        Update-ReplTurnAudit -Field 'auditActions' -Increment $actionC | Out-Null
+        Update-ReplTurnAudit -Field 'auditFiles' -Increment $added | Out-Null
+        Update-ReplTurnAudit -Field 'auditDecisions' -Increment $decC | Out-Null
+        Update-ReplTurnAudit -Field 'auditCommits' -Increment $comC | Out-Null
 
-    $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
-    $title = Get-ReplTurnCacheField -Field 'queryTitle'
-    Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
-        -Status 'in_progress' -ResponseText 'Actions appended.' `
-        -ActionsYaml $ParamsYaml | Out-Null
+        $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
+        $title = Get-ReplTurnCacheField -Field 'queryTitle'
+        Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
+            -Status 'in_progress' -ResponseText 'Actions appended.' `
+            -ActionsYaml $actionsBlock | Out-Null
+    }
     return $true
 }
 
@@ -401,12 +575,17 @@ function Invoke-WorkflowCompleteTurn {
         $responseText = $Matches[1].Trim()
     }
 
+    $actionsBlock = ''
+    if ($ParamsYaml -and ($ParamsYaml -match '(?m)^\s*actions:' -or $ParamsYaml -match '(?m)^\s*actions:\s*\S')) {
+        $actionsBlock = Get-ReplNormalizedActionsBlock -ParamsYaml ($ParamsYaml -replace "`r`n", "`n" -replace "`r", "")
+    }
+
     Update-ReplTurnCacheStatus -NewStatus 'completed' | Out-Null
 
     $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
     $title = Get-ReplTurnCacheField -Field 'queryTitle'
     Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
-        -Status 'completed' -ResponseText $responseText | Out-Null
+        -Status 'completed' -ResponseText $responseText -ActionsYaml $actionsBlock | Out-Null
     return $true
 }
 

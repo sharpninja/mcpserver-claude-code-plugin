@@ -102,7 +102,8 @@ function Read-OptionalText {
     )
 
     if ($Path) {
-        return [System.IO.File]::ReadAllText((Resolve-FullPath $Path))
+        $text = [System.IO.File]::ReadAllText((Resolve-FullPath $Path))
+        return $text -replace "`r`n", "`n" -replace "`r", ""
     }
 
     if ($HasInline) {
@@ -168,12 +169,14 @@ function Invoke-BashPluginScript {
         [Console]::Error.Write($stderr)
     }
 
-    if ($process.ExitCode -ne 0) {
-        throw "Plugin command failed with exit code $($process.ExitCode)."
-    }
-
     if ($stdout.Length -gt 0) {
         Write-Output ($stdout.TrimEnd("`r", "`n"))
+    }
+
+    if ($process.ExitCode -ne 0) {
+        $msg = "Plugin command failed with exit code $($process.ExitCode)."
+        if ($stdout) { $msg += "`n" + $stdout }
+        throw $msg
     }
 }
 
