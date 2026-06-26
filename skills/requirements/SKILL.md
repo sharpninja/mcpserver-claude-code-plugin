@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To manage functional requirements (FR), technical requirements (TR), test requirements (TEST), and their traceability mappings, use this Claude plugin's declared hook/wrapper for the `workflow.requirements.*` namespace. Do not substitute raw REST calls, generic `mcpserver-repl --agent-stdio`, helper modules, or another agent's plugin for normal requirements work.
+To manage functional requirements (FR), technical requirements (TR), test requirements (TEST), and their traceability mappings, use this Claude plugin's declared hook/wrapper for the `workflow.requirements.*` namespace. Do not substitute raw REST calls, generic `PowerShell.MCP wrapper`, helper modules, or another agent's plugin for normal requirements work.
 
 The plugin wrapper validates documented params and emits single-line JSON to REPL stdio. Any direct REPL diagnostic call must use one single-line JSON request envelope, not formatted YAML.
 

@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To interact with project TODOs, use the `workflow.todo.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Receive a `type: result` or `type: error` envelope on stdout. Streaming commands additionally emit a sequence of `type: event` envelopes before the final result.
+To interact with project TODOs, use the `workflow.todo.*` REPL command namespace via `PowerShell.MCP wrapper`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Receive a `type: result` or `type: error` envelope on stdout. Streaming commands additionally emit a sequence of `type: event` envelopes before the final result.
 
 ## Internal TODO Tracking Toggle
 
@@ -314,7 +314,7 @@ Common error codes:
 
 ## Implementation Notes
 
-- Use `repl_invoke` from `lib/repl-invoke.sh` to build and send envelopes via `mcpserver-repl --agent-stdio`.
+- Use `Invoke-McpPlugin.ps1` from `lib/repl-invoke.ps1` to build and send envelopes via `PowerShell.MCP wrapper`.
 - The `requestId` must match `^req-\d{8}T\d{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$` for every envelope.
 - All streaming operations may be cancelled by closing stdin or sending a cancellation request; the REPL guarantees a final cancellation event before closing the stream.
 - After marking a TODO done, record the action in the active session log turn using `workflow.sessionlog.appendActions` with `type: edit` and the TODO ID as context.

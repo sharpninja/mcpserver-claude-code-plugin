@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To manage agent session logs, use the `workflow.sessionlog.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Session logging captures agent activity, reasoning dialog, file operations, and design decisions as a structured audit trail.
+To manage agent session logs, use the `workflow.sessionlog.*` REPL command namespace via `PowerShell.MCP wrapper`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. Session logging captures agent activity, reasoning dialog, file operations, and design decisions as a structured audit trail.
 
 `workflow.sessionlog.*` is a plugin workflow/REPL namespace, not a literal native MCP tool namespace. Native McpServer `/mcp-transport` discovery uses names such as `sessionlog_*`, `todo_*`, and `requirements_*`; hosted-agent adapters may expose `mcp_session_*` aliases. Do not call this plugin unavailable solely because `workflow.*` names are absent from generic MCP discovery.
 
@@ -313,7 +313,7 @@ The plugin automatically captures rich session fields from Codex CLI JSONL trans
 
 ### Automatic Rich Field Capture
 
-When a Codex CLI session ends, `final-response.sh` reads the session JSONL (from `CODEX_SESSION_FILE`, `CODEX_ROLLOUT_FILE`, or the most recent `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) and calls `lib/codex-jsonl-enrich.js` to extract:
+When a Codex CLI session ends, `final-response.ps1` reads the session JSONL (from `CODEX_SESSION_FILE`, `CODEX_ROLLOUT_FILE`, or the most recent `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`) and calls `lib/PowerShell transcript enrichment` to extract:
 
 - `interpretation` - first agent message from the last turn
 - `processingDialog` - all agent messages, tool calls, and observations
@@ -328,7 +328,7 @@ These fields are passed to `completeTurn`, which routes through `importRecovery`
 
 ### Subagent Transcript Import
 
-When a Codex parent session spawns subagents, the `hooks/scripts/subagent-import.sh` hook (called on `subagentComplete`) discovers and imports each subagent JSONL as a first-class MCP session-log turn.
+When a Codex parent session spawns subagents, the `hooks/scripts/subagent-import.ps1` hook (called on `subagentComplete`) discovers and imports each subagent JSONL as a first-class MCP session-log turn.
 
 Subagent sessions are identified by `source.subagent.thread_spawn.parent_thread_id` in the JSONL `session_meta` line. The plugin scans `$CODEX_SESSION_DIR` (default: `~/.codex/sessions/`) for matching files.
 
@@ -341,26 +341,24 @@ Each imported subagent turn:
 
 To manually import a Codex JSONL transcript:
 
-```bash
+```powershell
 # Extract tab-delimited import lines (method, base64-params, label)
-node lib/codex-jsonl.js import /path/to/rollout.jsonl "SessionId-20260525T100000Z-fix" > import-lines.txt
 
 # Dispatch each line via repl-invoke
 while IFS=$'\t' read -r method params_b64 label; do
     params="$(printf '%s' "$params_b64" | base64 --decode)"
-    repl_invoke "$method" "$params"
+    Invoke-McpPlugin.ps1 "$method" "$params"
 done < import-lines.txt
 ```
 
 To discover subagent transcripts for a parent:
 
-```bash
-CODEX_SESSION_DIR=/path/to/sessions node lib/codex-jsonl.js subagents /path/to/parent-rollout.jsonl
+```powershell
 ```
 
 ### Non-Destructive Merge
 
-Server-side rich fields are never overwritten by sparse incoming values. `lib/sessionlog-submit-body.js` uses field-level merge: an empty incoming array never replaces a non-empty server-side array. This allows `completeTurn` and `importRecovery` to be called safely after rich fields have already been captured.
+Server-side rich fields are never overwritten by sparse incoming values. `lib/PowerShell session payload builder` uses field-level merge: an empty incoming array never replaces a non-empty server-side array. This allows `completeTurn` and `importRecovery` to be called safely after rich fields have already been captured.
 
 ### Secret Redaction
 
@@ -373,7 +371,7 @@ The following patterns are redacted from all JSONL-extracted text before logging
 
 ## Implementation Notes
 
-- Use `repl_invoke` from `lib/repl-invoke.sh` to build and dispatch envelopes.
+- Use `Invoke-McpPlugin.ps1` from `lib/repl-invoke.ps1` to build and dispatch envelopes.
 - Generate request IDs with the current UTC timestamp to guarantee uniqueness: `req-$(date -u +%Y%m%dT%H%M%SZ)-<slug>`.
 - Post `beginTurn` before starting any work on a user request; post `completeTurn` or `failTurn` after work ends. Never defer these calls.
 - Log all design decisions in `appendDialog` with `category: decision` AND in `appendActions` with `type: design_decision`.

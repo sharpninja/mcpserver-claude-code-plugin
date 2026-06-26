@@ -3,7 +3,7 @@ name: wrap-up
 description: Close out MCP-backed Claude Code work when asked to "wrap up", "export requirements", or "close out".
 ---
 
-Trust marker details only after the local status script confirms marker trust and workspace health. Use `lib/repl-invoke.sh` or `lib/repl-invoke.ps1`; do not use raw REST for normal MCP mutations.
+Trust marker details only after the local status script confirms marker trust and workspace health. Use `lib/repl-invoke.ps1` or `lib/repl-invoke.ps1`; do not use raw REST for normal MCP mutations.
 
 `workflow.*` names below are plugin workflow/REPL method names, not literal native MCP tool names. Native `/mcp-transport` tools use names such as `sessionlog_*`, `todo_*`, and `requirements_*`; hosted-agent adapters may expose `mcp_*` aliases. Do not declare the plugin unavailable solely because generic MCP discovery does not list literal `workflow.*` names.
 

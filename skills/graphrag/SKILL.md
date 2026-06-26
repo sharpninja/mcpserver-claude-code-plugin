@@ -8,7 +8,7 @@ version: 0.1.0
 
 ## Overview
 
-To interact with the workspace GraphRAG knowledge graph, use the `workflow.graphrag.*` REPL command namespace via `mcpserver-repl --agent-stdio`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. GraphRAG combines graph-based retrieval with semantic search, enabling richer context retrieval than vector-only approaches.
+To interact with the workspace GraphRAG knowledge graph, use the `workflow.graphrag.*` REPL command namespace via `PowerShell.MCP wrapper`. Direct stdio input must be one single-line JSON request envelope per message, not formatted YAML. GraphRAG combines graph-based retrieval with semantic search, enabling richer context retrieval than vector-only approaches.
 
 GraphRAG is disabled by default. Confirm it is active for the workspace before calling any operations — `workflow.graphrag.status` will report `enabled: false` if it has not been configured.
 
