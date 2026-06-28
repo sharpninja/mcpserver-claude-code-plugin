@@ -1,6 +1,6 @@
 {
   "name": "mcpserver-codex",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Connect Codex CLI to McpServer for session logging, TODO management, requirements tracking, and subagent transcript capture.",
   "author": {
     "name": "Payton Byrd (The Sharp Ninja)",
