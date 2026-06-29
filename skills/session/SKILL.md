@@ -12,6 +12,8 @@ To manage agent session logs, use the `workflow.sessionlog.*` REPL command names
 
 `workflow.sessionlog.*` is a plugin workflow/REPL namespace, not a literal native MCP tool namespace. Native McpServer `/mcp-transport` discovery uses names such as `sessionlog_*`, `todo_*`, and `requirements_*`; hosted-agent adapters may expose `mcp_session_*` aliases. Do not call this plugin unavailable solely because `workflow.*` names are absent from generic MCP discovery.
 
+`workflow.*` result envelopes may include `deprecated: true`. This is success metadata that tells callers the workflow namespace is legacy-compatible and should migrate toward the canonical `client.*` surface where available; it is not a failure signal and is not a reason to use raw REST. Treat empty `workflow.sessionlog.queryHistory` results as a valid no-match result, not as an inert wrapper. Re-check the workspace current directory, explicit `agent` or `sourceType`, and local plugin cache/session state through the wrapper before reporting history as unavailable.
+
 Most session management is automated by the plugin hooks in `hooks/`. This skill covers manual operations, history queries, and the full lifecycle for agents that need direct control.
 
 ## Identifier Naming Conventions
