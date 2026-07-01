@@ -108,7 +108,7 @@ function Test-MaterialTranscriptChange {
 
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     if ($Text -match '"tool_use"' -or $Text -match '"tool_result"') { return $true }
-    return $Text -match '"name"\s*:\s*"(Write|Edit|MultiEdit|NotebookEdit|Bash|Shell|PowerShell|pwsh|Task|Skill|TodoWrite|mcp_[^"]+|workflow\.[^"]+)"'
+    return $Text -match '"name"\s*:\s*"(Write|Edit|MultiEdit|NotebookEdit|Shell|PowerShell|pwsh|Task|Skill|TodoWrite|mcp_[^"]+|workflow\.[^"]+)"'
 }
 
 $raw = [Console]::In.ReadToEnd()
