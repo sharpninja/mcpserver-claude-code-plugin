@@ -5,4 +5,5 @@ cache/plan-todo-map.yaml
 cache/current-turn.yaml
 cache/todo-state.yaml
 cache/workspaces/
+AGENTS-README-FIRST.yaml.deleted-*
 *.tmp

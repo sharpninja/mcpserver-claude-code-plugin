@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SettingsPath = (Join-Path $HOME '.claude/settings.json'),
-    [string]$PluginRoot = $(if ($env:CLAUDE_PLUGIN_ROOT) { $env:CLAUDE_PLUGIN_ROOT } else { (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).ProviderPath }),
+    [string]$PluginRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).ProviderPath,
     [switch]$NoBackup,
     [switch]$VerifyOnly
 )
@@ -60,10 +60,117 @@ function ConvertTo-HookIdentity {
     return "$matcher`n$condition`n$($commands -join "`n")"
 }
 
+function ConvertTo-CommandArgument {
+    param([Parameter(Mandatory)][string]$Value)
+
+    return '"' + $Value.Replace('"', '\"') + '"'
+}
+
+function Get-HookScriptNameFromCommand {
+    param([AllowNull()][string]$Command)
+
+    if ([string]::IsNullOrWhiteSpace($Command)) {
+        return $null
+    }
+
+    $match = [regex]::Match($Command, '(?i)(?:hooks[\\/]+scripts[\\/]+|-ScriptName\s+["'']?)(?<script>[A-Za-z0-9._-]+\.ps1)')
+    if (-not $match.Success) {
+        return $null
+    }
+
+    return $match.Groups['script'].Value
+}
+
+function New-StableHookCommand {
+    param(
+        [Parameter(Mandatory)][string]$BridgePath,
+        [Parameter(Mandatory)][string]$HookScriptName,
+        [Parameter(Mandatory)][string]$PluginRootHint
+    )
+
+    $bridgeArg = ConvertTo-CommandArgument -Value $BridgePath
+    $scriptArg = ConvertTo-CommandArgument -Value $HookScriptName
+    $rootArg = ConvertTo-CommandArgument -Value $PluginRootHint
+    return "pwsh -NoLogo -NoProfile -NonInteractive -File $bridgeArg -ScriptName $scriptArg -PluginRootHint $rootArg"
+}
+
+function ConvertTo-StableHookGroup {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$HookGroup,
+        [Parameter(Mandatory)][string]$BridgePath,
+        [Parameter(Mandatory)][string]$PluginRootHint
+    )
+
+    $converted = Convert-ToOrderedObject $HookGroup
+    if (-not $converted.Contains('hooks')) {
+        return $converted
+    }
+
+    $convertedHooks = @()
+    foreach ($hook in @($converted['hooks'])) {
+        if ($hook -isnot [System.Collections.IDictionary]) {
+            $convertedHooks += $hook
+            continue
+        }
+
+        $hookCopy = Convert-ToOrderedObject $hook
+        $scriptName = if ($hookCopy.Contains('command')) { Get-HookScriptNameFromCommand -Command ([string]$hookCopy['command']) } else { $null }
+        if (-not [string]::IsNullOrWhiteSpace($scriptName)) {
+            $hookCopy['command'] = New-StableHookCommand -BridgePath $BridgePath -HookScriptName $scriptName -PluginRootHint $PluginRootHint
+        }
+
+        $convertedHooks += $hookCopy
+    }
+
+    $converted['hooks'] = @($convertedHooks)
+    return $converted
+}
+
+function Remove-ManagedHookCommands {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$TargetHooks)
+
+    foreach ($eventName in @($TargetHooks.Keys)) {
+        $retainedGroups = @()
+        foreach ($group in @($TargetHooks[$eventName])) {
+            if ($group -isnot [System.Collections.IDictionary] -or -not $group.Contains('hooks')) {
+                $retainedGroups += $group
+                continue
+            }
+
+            $groupCopy = Convert-ToOrderedObject $group
+            $retainedCommands = @()
+            foreach ($hook in @($groupCopy['hooks'])) {
+                if ($hook -isnot [System.Collections.IDictionary] -or -not $hook.Contains('command')) {
+                    $retainedCommands += $hook
+                    continue
+                }
+
+                $scriptName = Get-HookScriptNameFromCommand -Command ([string]$hook['command'])
+                if ([string]::IsNullOrWhiteSpace($scriptName)) {
+                    $retainedCommands += $hook
+                }
+            }
+
+            if ($retainedCommands.Count -gt 0) {
+                $groupCopy['hooks'] = @($retainedCommands)
+                $retainedGroups += $groupCopy
+            }
+        }
+
+        if ($retainedGroups.Count -gt 0) {
+            $TargetHooks[$eventName] = @($retainedGroups)
+        } else {
+            $TargetHooks.Remove($eventName)
+        }
+    }
+}
+
 function Add-HookGroups {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$TargetHooks,
-        [Parameter(Mandatory)][System.Collections.IDictionary]$SourceHooks
+        [Parameter(Mandatory)][System.Collections.IDictionary]$SourceHooks,
+        [Parameter(Mandatory)][string]$BridgePath,
+        [Parameter(Mandatory)][string]$PluginRootHint
     )
 
     $added = 0
@@ -82,10 +189,11 @@ function Add-HookGroups {
 
         foreach ($sourceGroup in @($SourceHooks[$eventName])) {
             if ($sourceGroup -isnot [System.Collections.IDictionary]) { continue }
-            $identity = ConvertTo-HookIdentity -HookGroup $sourceGroup
+            $stableSourceGroup = ConvertTo-StableHookGroup -HookGroup $sourceGroup -BridgePath $BridgePath -PluginRootHint $PluginRootHint
+            $identity = ConvertTo-HookIdentity -HookGroup $stableSourceGroup
             if ($existing.Contains($identity)) { continue }
 
-            $targetGroups += Convert-ToOrderedObject $sourceGroup
+            $targetGroups += $stableSourceGroup
             [void]$existing.Add($identity)
             $added++
         }
@@ -118,6 +226,18 @@ if (-not (Test-Path -LiteralPath $settingsDirectory -PathType Container)) {
     [void][System.IO.Directory]::CreateDirectory($settingsDirectory)
 }
 
+$stableHookDirectory = Join-Path $settingsDirectory 'hooks/mcpserver'
+if (-not (Test-Path -LiteralPath $stableHookDirectory -PathType Container)) {
+    [void][System.IO.Directory]::CreateDirectory($stableHookDirectory)
+}
+
+$bridgeSourcePath = Join-Path $pluginRootFull 'skills/claude-hook-wiring/scripts/claude-mcp-hook-bridge.ps1'
+if (-not (Test-Path -LiteralPath $bridgeSourcePath -PathType Leaf)) {
+    throw "Claude hook bridge source not found: $bridgeSourcePath"
+}
+
+$stableBridgePath = Join-Path $stableHookDirectory 'claude-mcp-hook-bridge.ps1'
+
 $settings = Convert-ToOrderedObject (Read-JsonObject -Path $SettingsPath)
 $pluginHooksDocument = Read-JsonObject -Path $pluginHooksPath
 if (-not $pluginHooksDocument.Contains('hooks') -or $pluginHooksDocument['hooks'] -isnot [System.Collections.IDictionary]) {
@@ -128,7 +248,8 @@ if (-not $settings.Contains('hooks') -or $settings['hooks'] -isnot [System.Colle
     $settings['hooks'] = [ordered]@{}
 }
 
-$added = Add-HookGroups -TargetHooks $settings['hooks'] -SourceHooks $pluginHooksDocument['hooks']
+Remove-ManagedHookCommands -TargetHooks $settings['hooks']
+$added = Add-HookGroups -TargetHooks $settings['hooks'] -SourceHooks $pluginHooksDocument['hooks'] -BridgePath $stableBridgePath -PluginRootHint $pluginRootFull
 Test-RequiredHooks -Hooks $settings['hooks']
 
 if (-not $VerifyOnly) {
@@ -136,6 +257,9 @@ if (-not $VerifyOnly) {
         $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
         Copy-Item -LiteralPath $SettingsPath -Destination "$SettingsPath.bak-$timestamp" -Force
     }
+
+    Copy-Item -LiteralPath $bridgeSourcePath -Destination $stableBridgePath -Force
+    [System.IO.File]::WriteAllText((Join-Path $stableHookDirectory 'current-plugin-root.txt'), $pluginRootFull, [System.Text.UTF8Encoding]::new($false))
 
     $json = ($settings | ConvertTo-Json -Depth 100)
     $json = $json.Replace("`r`n", "`n").Replace("`r", "`n") + "`n"
@@ -146,5 +270,6 @@ if (-not $VerifyOnly) {
     status = if ($VerifyOnly) { 'verified' } else { 'updated' }
     settingsPath = (Resolve-Path -LiteralPath $SettingsPath).ProviderPath
     pluginHooksPath = $pluginHooksPath
+    bridgePath = $stableBridgePath
     addedHookGroups = $added
 } | ConvertTo-Json -Depth 10 -Compress

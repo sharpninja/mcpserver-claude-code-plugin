@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SettingsPath = (Join-Path $HOME '.claude/settings.json'),
-    [string]$PluginRoot = $(if ($env:CLAUDE_PLUGIN_ROOT) { $env:CLAUDE_PLUGIN_ROOT } else { (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).ProviderPath }),
+    [string]$PluginRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../../..')).ProviderPath,
     [switch]$CheckOnly,
     [switch]$NoBackup
 )
@@ -29,7 +29,7 @@ function Test-HookCommand {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Settings,
         [Parameter(Mandatory)][string]$EventName,
-        [Parameter(Mandatory)][string]$CommandFragment
+        [Parameter(Mandatory)][string[]]$CommandFragments
     )
 
     if (-not $Settings.Contains('hooks') -or $Settings['hooks'] -isnot [System.Collections.IDictionary]) {
@@ -51,7 +51,16 @@ function Test-HookCommand {
                 continue
             }
 
-            if ([string]$hook['command'] -like "*$CommandFragment*") {
+            $command = [string]$hook['command']
+            $missingFragment = $false
+            foreach ($fragment in $CommandFragments) {
+                if ($command -notlike "*$fragment*") {
+                    $missingFragment = $true
+                    break
+                }
+            }
+
+            if (-not $missingFragment) {
                 return $true
             }
         }
@@ -64,15 +73,15 @@ function Get-MissingHookCommands {
     param([Parameter(Mandatory)][System.Collections.IDictionary]$Settings)
 
     $required = @(
-        @{ EventName = 'UserPromptSubmit'; Fragment = 'user-prompt-submit.ps1' },
-        @{ EventName = 'Stop'; Fragment = 'stop-gate.ps1' },
-        @{ EventName = 'PostToolUse'; Fragment = 'code-verify.ps1' }
+        @{ EventName = 'UserPromptSubmit'; Fragments = @('claude-mcp-hook-bridge.ps1', 'user-prompt-submit.ps1') },
+        @{ EventName = 'Stop'; Fragments = @('claude-mcp-hook-bridge.ps1', 'stop-gate.ps1') },
+        @{ EventName = 'PostToolUse'; Fragments = @('claude-mcp-hook-bridge.ps1', 'code-verify.ps1') }
     )
 
     $missing = @()
     foreach ($requirement in $required) {
-        if (-not (Test-HookCommand -Settings $Settings -EventName $requirement.EventName -CommandFragment $requirement.Fragment)) {
-            $missing += "$($requirement.EventName):$($requirement.Fragment)"
+        if (-not (Test-HookCommand -Settings $Settings -EventName $requirement.EventName -CommandFragments $requirement.Fragments)) {
+            $missing += "$($requirement.EventName):$($requirement.Fragments -join '+')"
         }
     }
 
