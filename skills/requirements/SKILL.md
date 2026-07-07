@@ -1,6 +1,6 @@
 ---
 name: Requirements Management
-description: This skill should be used when the user asks to "list requirements", "add requirement", "create FR", "create TR", "create test requirement", "generate requirements document", "ingest requirements"
+description: Use when the user asks to "list requirements", "add requirement", "create FR", "create TR", "create test requirement", "generate requirements document", or "ingest requirements".
 version: 0.1.0
 ---
 
@@ -8,11 +8,23 @@ version: 0.1.0
 
 ## Overview
 
-To manage functional requirements (FR), technical requirements (TR), test requirements (TEST), and their traceability mappings, use this Claude plugin's declared hook/wrapper for the `workflow.requirements.*` namespace. Do not substitute raw REST calls, generic `PowerShell.MCP wrapper`, helper modules, or another agent's plugin for normal requirements work.
+To manage functional requirements (FR), technical requirements (TR), test requirements (TEST), and their traceability mappings, use this plugin's declared hook/wrapper (or the REPL transport) for the `workflow.requirements.*` namespace. Do not substitute raw REST calls, generic `PowerShell.MCP wrapper`, helper modules, or another agent's plugin for normal requirements work.
 
 The plugin wrapper validates documented params and emits single-line JSON to REPL stdio. Any direct REPL diagnostic call must use one single-line JSON request envelope, not formatted YAML.
 
 The database is the source of truth for requirements. Markdown files are import/export projections only. Every operation is scoped to the workspace resolved from the signed marker, and generated workspace output must contain only the requested workspace's FR, TR, TEST, and traceability links.
+
+## Initialization
+
+Call `workflow.sessionlog.bootstrap` through this plugin's declared hook/wrapper to initialize the session log subsystem before issuing any workflow commands. This call is idempotent and should be made once per conversation context.
+
+```yaml
+type: request
+payload:
+  requestId: req-20260409T120000Z-bootstrap-001
+  method: workflow.sessionlog.bootstrap
+  params: {}
+```
 
 ## Requirement Scope Layers
 
@@ -76,9 +88,9 @@ Omit both fields for requirements that are effective in the default/current laye
 
 Three ID spaces are in use:
 
-- **FR** — Functional Requirements: `^FR-[A-Z]+-\d{3}$`, e.g. `FR-MCP-001`, `FR-AUTH-042`
-- **TR** — Technical Requirements: `^TR-[A-Z]+-[A-Z]+-\d{3}$`, e.g. `TR-MCP-ARCH-001`, `TR-AUTH-SEC-002`
-- **TEST** — Test Requirements: `^TEST-[A-Z]+-\d{3}$`, e.g. `TEST-MCP-001`, `TEST-AUTH-003`
+- **FR** - Functional Requirements: `^FR-[A-Z]+-\d{3}$`, e.g. `FR-MCP-001`, `FR-AUTH-042`
+- **TR** - Technical Requirements: `^TR-[A-Z]+-[A-Z]+-\d{3}$`, e.g. `TR-MCP-ARCH-001`, `TR-AUTH-SEC-002`
+- **TEST** - Test Requirements: `^TEST-[A-Z]+-\d{3}$`, e.g. `TEST-MCP-001`, `TEST-AUTH-003`
 
 All IDs must be uppercase. TR IDs require both an area and a subarea segment; FR and TEST IDs require only an area segment.
 
@@ -403,11 +415,11 @@ payload:
 
 Valid `docType` values:
 
-- `functional` — numbered list of all FR entries with status and description
-- `technical` — numbered list of all TR entries grouped by area/subarea
-- `testing` — numbered list of all TEST entries with linked FR IDs
-- `matrix` — traceability matrix table: FR × TR × TEST × status
-- `all` — complete export package
+- `functional` - numbered list of all FR entries with status and description
+- `technical` - numbered list of all TR entries grouped by area/subarea
+- `testing` - numbered list of all TEST entries with linked FR IDs
+- `matrix` - traceability matrix table: FR × TR × TEST × status
+- `all` - complete export package
 
 ```yaml
 type: result
@@ -515,13 +527,13 @@ payload:
 
 Common error codes:
 
-- `requirement_not_found` — no requirement with the given ID
-- `requirement_already_exists` — ID already in use; update instead of create
-- `invalid_requirement_id` — ID does not match the expected regex for its type
-- `mapping_not_found` — mapping between the specified FR and TR does not exist
-- `invalid_mapping` — mapping references a non-existent FR, TR, or TEST ID
-- `document_generation_error` — failed to render the requested document format
-- `document_ingestion_error` — could not parse or persist the ingested document
+- `requirement_not_found` - no requirement with the given ID
+- `requirement_already_exists` - ID already in use; update instead of create
+- `invalid_requirement_id` - ID does not match the expected regex for its type
+- `mapping_not_found` - mapping between the specified FR and TR does not exist
+- `invalid_mapping` - mapping references a non-existent FR, TR, or TEST ID
+- `document_generation_error` - failed to render the requested document format
+- `document_ingestion_error` - could not parse or persist the ingested document
 
 ## Workflow Recommendations
 

@@ -1,13 +1,21 @@
 ---
-name: sync-logs
-description: Synchronize MCP Server session logs for Claude Code when asked to "sync logs", "repair MCP session logs", or "logging summary".
+name: Sync Logs
+description: Use when the user asks to "sync logs", "repair MCP session logs", "logging summary", or "summarize logging" to synchronize and reconcile MCP Server session logs through the plugin bridge.
+version: 0.1.0
 ---
 
-Use the local Claude Code bridge path: `lib/mcp.claude.status.ps1`, `lib/repl-invoke.ps1` or `lib/repl-invoke.ps1`, `lib/marker-resolver.*`, and `lib/final-response.ps1`. Do not use raw REST for normal MCP mutations.
+Route MCP session-log operations through your plugin's local bridge: its status check, REPL-invoke, marker-resolver, and final-response helpers (or the equivalent `ReplBridge` transport and `session*` bridge tools). Do not use raw REST for normal MCP mutations.
 
-Run a status check first. Ensure session/turn handling is open with `workflow.sessionlog.openSession` or `workflow.sessionlog.beginTurn`, append reasoning with `workflow.sessionlog.appendDialog`, and append durable actions with `workflow.sessionlog.appendActions`.
+The `workflow.*` names below are plugin workflow/REPL method names used by the bridge, not literal agent-visible MCP tool names. Your agent-visible tools use this plugin's host-facing names, and native `/mcp-transport` tools use names such as `sessionlog_*`, `todo_*`, and `requirements_*`. Do not declare the plugin unavailable solely because generic MCP discovery does not list literal `workflow.*` names.
 
-Discover background sessions from local cache/session state before closing. Report a compact factual summary with session ids, turn ids, actions, commits, validation, defects, and blockers.
+## Steps
+
+1. Run a status check through the bridge first, and trust the marker details reported by the plugin.
+2. Ensure session/turn handling is open with `workflow.sessionlog.openSession` or `workflow.sessionlog.beginTurn`.
+3. Append reasoning and results with `workflow.sessionlog.appendDialog`.
+4. Append durable actions with `workflow.sessionlog.appendActions`.
+5. Discover background sessions from plugin cache/workspace session state before summarizing.
+6. End with a compact factual summary that names session ids, turn ids, actions, commits, validation, defects, and unresolved blockers.
 
 ## Wrapper Result Semantics
 
