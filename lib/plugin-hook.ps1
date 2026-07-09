@@ -292,10 +292,17 @@ function Open-PluginTurn {
 
     $payload = Read-HookInput
     $prompt = Get-HookPayloadValue -Payload $payload -Name 'prompt'
-    if (-not $prompt) { $prompt = 'User prompt' }
+    if (-not $prompt) { $prompt = 'Continuation or hook-triggered turn.' }
     $title = (($prompt -split "`r?`n")[0]).Trim()
-    if (-not $title) { $title = 'User prompt' }
+    if (-not $title) { $title = 'Continuation turn' }
     if ($title.Length -gt 60) { $title = $title.Substring(0, 60) }
+    $markerSnapshot = $null
+    try {
+        $markerSnapshot = Get-MarkerFileSnapshot -StartDir $startPath
+    } catch {
+    }
+    $sessionState = Read-McpYamlObject -Path $sessionFile -Create
+    $sessionId = if ($sessionState.Contains('sessionId')) { [string]$sessionState['sessionId'] } else { '' }
 
     $turnRequestId = 'req-{0}-prompt-{1:x4}' -f (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'), (Get-Random -Maximum 0xffff)
     $paramsYaml = ConvertTo-PluginParamsYaml ([ordered]@{
@@ -319,7 +326,14 @@ function Open-PluginTurn {
         auditDecisions = 0
         queryText = $prompt
     }
-    [System.IO.File]::WriteAllText($turnFile, (ConvertTo-PluginParamsYaml $turnState))
+    if ($sessionId) {
+        $turnState['sessionId'] = $sessionId
+    }
+    if ($markerSnapshot) {
+        $turnState['markerFilePath'] = $markerSnapshot.markerFilePath
+        $turnState['markerLastWriteUtc'] = $markerSnapshot.markerLastWriteUtc
+    }
+    Write-McpYamlObject -Path $turnFile -Document $turnState
 
     Write-PluginJson ([ordered]@{
         hookSpecificOutput = [ordered]@{
@@ -521,6 +535,15 @@ function Get-TodoIdFromReplOutput {
     return $null
 }
 
+function New-PlanTodoId {
+    param([Parameter(Mandatory)][string]$Title)
+
+    $slug = ($Title.ToUpperInvariant() -replace '[^A-Z0-9]', '')
+    if (-not $slug) { $slug = 'PLAN' }
+    if ($slug.Length -gt 40) { $slug = $slug.Substring(0, 40) }
+    return "PLAN-$slug-001"
+}
+
 function Invoke-PlanApprovedHook {
     $planFile = Get-PlanFilePathFromInput
     if (-not $planFile -or -not (Test-Path -LiteralPath $planFile -PathType Leaf)) {
@@ -529,8 +552,18 @@ function Invoke-PlanApprovedHook {
     }
 
     $title = Get-PlanTitle -PlanFile $planFile
-    $paramsYaml = "title: $title`ndescription: |`n  Plan approved from $planFile"
-    $output = @(Invoke-PluginRepl -Method 'workflow.todo.create' -ParamsYaml $paramsYaml)
+    # client.Todo.CreateAsync(TodoCreateRequest request): the server requires a
+    # non-empty params.id, so derive a canonical PLAN-<slug>-001 id from the title.
+    $paramsYaml = ConvertTo-PluginParamsYaml -Params ([ordered]@{
+        request = [ordered]@{
+            id          = New-PlanTodoId -Title $title
+            title       = $title
+            section     = 'Planning'
+            priority    = 'medium'
+            description = @("Plan approved from $planFile")
+        }
+    })
+    $output = @(Invoke-PluginRepl -Method 'client.Todo.CreateAsync' -ParamsYaml $paramsYaml)
     $todoId = Get-TodoIdFromReplOutput -Output $output
     if ($todoId) {
         $mapPath = Get-PlanTodoMapPath
@@ -577,8 +610,12 @@ function Invoke-PlanModifiedHook {
         return
     }
 
-    $paramsYaml = "id: $todoId`ndoneSummary: |`n  Plan modified: $planFile"
-    Invoke-PluginRepl -Method 'workflow.todo.update' -ParamsYaml $paramsYaml | Out-Null
+    # client.Todo.UpdateAsync(string id, TodoUpdateRequest request)
+    $paramsYaml = ConvertTo-PluginParamsYaml -Params ([ordered]@{
+        id      = $todoId
+        request = [ordered]@{ doneSummary = "Plan modified: $planFile" }
+    })
+    Invoke-PluginRepl -Method 'client.Todo.UpdateAsync' -ParamsYaml $paramsYaml | Out-Null
     Write-PostToolUseOutput -Status 'updated'
 }
 

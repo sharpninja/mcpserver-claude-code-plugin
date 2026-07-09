@@ -26,7 +26,16 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $shimModule = Join-Path $PSScriptRoot 'McpPluginShim.psm1'
-Import-Module $shimModule -ErrorAction Stop
+Import-Module $shimModule -Force -ErrorAction Stop
+$shimCommand = Get-Command New-McpPluginTurnUpsertRequest -ErrorAction Stop
+if (-not $shimCommand.Parameters.ContainsKey('ProcessingDialog')) {
+    Remove-Module McpPluginShim -Force -ErrorAction SilentlyContinue
+    Import-Module $shimModule -Force -ErrorAction Stop
+    $shimCommand = Get-Command New-McpPluginTurnUpsertRequest -ErrorAction Stop
+    if (-not $shimCommand.Parameters.ContainsKey('ProcessingDialog')) {
+        throw 'McpPluginShim.psm1 is stale or invalid because New-McpPluginTurnUpsertRequest lacks ProcessingDialog.'
+    }
+}
 . (Join-Path $PSScriptRoot 'yaml-object-mutation.ps1')
 Import-McpYamlSerializer
 if (-not (Get-Command Find-MarkerFile -ErrorAction SilentlyContinue)) {
@@ -435,23 +444,19 @@ function Invoke-ReplRaw {
 }
 
 function Get-ReplSessionStateValue {
-    # PowerShell twin of _repl_session_state_value: first scalar for a
-    # top-level key in session-state.yaml.
     param([Parameter(Mandatory)][string]$Key)
     $f = Join-Path (Get-ReplInvokeCacheDir) 'session-state.yaml'
     if (-not (Test-Path $f)) { return '' }
-    $line = Select-String -Path $f -Pattern "^${Key}:" | Select-Object -First 1
-    if (-not $line) { return '' }
-    return ($line.Line -replace "^${Key}:\s*", '').Trim()
+    $state = Read-McpYamlObject -Path $f
+    if (-not $state -or -not $state.Contains($Key) -or $null -eq $state[$Key]) { return '' }
+    return [string]$state[$Key]
 }
 
 function Get-ReplCurrentTurnValue {
     param([Parameter(Mandatory)][string]$Key)
-    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return '' }
-    $line = Select-String -Path $turnFile -Pattern "^${Key}:" | Select-Object -First 1
-    if (-not $line) { return '' }
-    return ($line.Line -replace "^${Key}:\s*", '').Trim()
+    $state = Read-ReplCurrentTurnState
+    if (-not $state -or -not $state.Contains($Key) -or $null -eq $state[$Key]) { return '' }
+    return [string]$state[$Key]
 }
 
 function Get-ReplCurrentTurnFile {
@@ -466,24 +471,26 @@ function Deny-ReplMissingCurrentTurn {
     return $false
 }
 
-function Get-ReplCurrentTurnQueryText {
-    # Extract the queryText literal block from current-turn.yaml (twin of
-    # _repl_yaml_block_get for the one block the upsert path needs).
+function Read-ReplCurrentTurnState {
     $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return '' }
+    if (-not (Test-Path $turnFile)) { return $null }
     try {
-        $turnState = Read-McpYamlObject -Path $turnFile
-        if ($turnState -and $turnState.Contains('queryText')) {
-            return [string]$turnState['queryText']
-        }
+        return Read-McpYamlObject -Path $turnFile
     } catch {
-        # Fall through to the legacy literal-block parser.
+        return $null
     }
-    $text = Get-Content -Path $turnFile -Raw
-    if ($text -match '(?ms)^queryText:\s*\|\s*\r?\n(.*?)(?=^\S|\z)') {
-        $block = $Matches[1]
-        $lines = $block -split "`n" | ForEach-Object { $_ -replace '^\s{0,4}', '' }
-        return (($lines -join "`n").TrimEnd())
+}
+
+function Write-ReplCurrentTurnState {
+    param([Parameter(Mandatory)]$State)
+    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
+    Write-McpYamlObject -Path $turnFile -Document $State
+}
+
+function Get-ReplCurrentTurnQueryText {
+    $turnState = Read-ReplCurrentTurnState
+    if ($turnState -and $turnState.Contains('queryText')) {
+        return [string]$turnState['queryText']
     }
     return ''
 }
@@ -630,9 +637,8 @@ function Invoke-ReplSubmitSessionFallback {
 }
 
 function Invoke-ReplPersistTurn {
-    # Persist the turn via client.SessionLog.UpsertTurnAsync with a failsafe
-    # capture first, falling back to full-session SubmitAsync only when the
-    # upsert method is missing (sh twin: _repl_persist_turn, commit 97aab2d).
+    # The REPL owns primary/failsafe selection. The plugin submits one snapshot and
+    # only inspects the durable persistence result returned by the REPL.
     param(
         [Parameter(Mandatory)][string]$RequestId,
         [Parameter(Mandatory)][string]$Title,
@@ -641,6 +647,7 @@ function Invoke-ReplPersistTurn {
         [string]$ActionsYaml = '',
         [object[]]$ProcessingDialog = @()
     )
+    $script:LastReplPersistenceDetails = $null
     $meta = Get-ReplSessionMeta
     if (-not $meta) { throw 'Session log persistence failed because no session metadata is cached.' }
 
@@ -649,103 +656,82 @@ function Invoke-ReplPersistTurn {
         -Status $Status -ResponseText $ResponseText -ActionsYaml $ActionsYaml `
         -ProcessingDialog $ProcessingDialog
 
-    $envelope = New-McpPluginReplRequest `
-        -RequestId "req-$(Get-Date -AsUTC -Format 'yyyyMMddTHHmmssZ')-$(Get-Random -Maximum 0xffff)" `
-        -Method 'client.SessionLog.UpsertTurnAsync' `
-        -Params $turnObj
-    $jsonEnvelope = ConvertTo-McpPluginJson -InputObject $envelope -Depth 10 -Compress
-
-    $failsafe = Write-ReplFailsafe -Method 'client.SessionLog.UpsertTurnAsync' `
-        -ParamsYaml $jsonEnvelope -Label 'session_upsertTurn'
-
-    # Send as JSON envelope (reliable serialization, no manual YAML text)
-    $tmp = Join-Path (Get-ReplInvokeCacheDir) "envelope-$RequestId.json"
-    [System.IO.File]::WriteAllText($tmp, $jsonEnvelope, [System.Text.Encoding]::UTF8)
-    try {
-        $psi = [System.Diagnostics.ProcessStartInfo]::new()
-        $psi.FileName = 'mcpserver-repl'
-        $psi.ArgumentList.Add('--agent-stdio')
-        if ($script:AgentName -and $script:AgentName -ne 'default') {
-            $psi.ArgumentList.Add('--agent'); $psi.ArgumentList.Add($script:AgentName)
-        }
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
-        Set-ReplProcessWorkspace -StartInfo $psi
-        $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-        $proc = [System.Diagnostics.Process]::Start($psi)
-        $fs = [System.IO.File]::OpenRead($tmp)
-        $fs.CopyTo($proc.StandardInput.BaseStream)
-        $fs.Close()
-        $proc.StandardInput.Close()
-        $outTask = $proc.StandardOutput.ReadToEndAsync()
-        $outTask.Wait(30000) | Out-Null
-        $output = $outTask.Result
-        $proc.WaitForExit()
-        $output = $output -replace "[\uFEFF]", ''
-        $isErr = $output -match '(?m)^type:\s*error\b'
-        if ($proc.ExitCode -eq 0 -and -not $isErr) {
-            Clear-ReplFailsafe -Path $failsafe
-            return $true
-        }
-        if ($output -match 'method_not_found' -or $output -match 'Session not found') {
-            Clear-ReplFailsafe -Path $failsafe
-            $fallbackOk = Invoke-ReplSubmitSessionFallback -Meta $meta -RequestId $RequestId `
-                -Title $Title -Status $Status -ResponseText $ResponseText `
-                -ActionsYaml $ActionsYaml -ProcessingDialog $ProcessingDialog
-            if (-not $fallbackOk) {
-                throw "Session log fallback submit failed for request '$RequestId'."
-            }
-            return $true
-        }
-        $message = "Session log persistence failed for request '$RequestId'. ExitCode=$($proc.ExitCode). Output=$output"
-        throw $message
-    } finally {
-        Remove-Item $tmp -ErrorAction SilentlyContinue
+    $sessionTitle = Get-ReplSessionStateValue -Key 'title'
+    if (-not $sessionTitle) { $sessionTitle = $Title }
+    $sessionStarted = Get-ReplSessionStateValue -Key 'started'
+    if (-not $sessionStarted) { $sessionStarted = [string]$turnObj.turn.timestamp }
+    $sessionLog = [ordered]@{
+        sourceType = $meta.SourceType
+        sessionId = $meta.SessionId
+        title = $sessionTitle
+        model = [string]$turnObj.turn.model
+        started = $sessionStarted
+        lastUpdated = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        status = 'in_progress'
+        turnCount = 1
+        turns = @($turnObj.turn)
     }
+    $paramsJson = ConvertTo-McpPluginJson -InputObject ([ordered]@{
+        sessionLog = $sessionLog
+    }) -Depth 20 -Compress
+
+    $result = Invoke-ReplRaw -Method 'repl.sessionlog.persistTurn' -ParamsYaml $paramsJson
+    if (-not $result.Success) {
+        throw "Session log persistence failed for request '$RequestId'. Output=$($result.Output) Error=$($result.Error)"
+    }
+
+    $response = Convert-ReplParamsYamlToObject -ParamsYaml $result.Output
+    $payload = Get-ReplObjectValue -InputObject $response -Name 'payload'
+    $details = Get-ReplObjectValue -InputObject $payload -Name 'result'
+    if (-not $details) {
+        throw "Session log persistence returned no durable result for request '$RequestId'."
+    }
+
+    $persisted = Get-ReplObjectValue -InputObject $details -Name 'persisted'
+    if ($persisted -ne $true) {
+        throw "Session log persistence did not confirm a durable write for request '$RequestId'."
+    }
+
+    $script:LastReplPersistenceDetails = $details
+    return $true
 }
 
 function Update-ReplTurnCacheStatus {
     param([Parameter(Mandatory)][string]$NewStatus)
-    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return $false }
-    $lines = Get-Content -Path $turnFile
-    $updated = $lines | ForEach-Object {
-        if ($_ -match '^status:') { "status: $NewStatus" } else { $_ }
-    }
-    Set-Content -Path $turnFile -Value $updated -NoNewline:$false
+    $state = Read-ReplCurrentTurnState
+    if (-not $state) { return $false }
+    $state['status'] = $NewStatus
+    Write-ReplCurrentTurnState -State $state
     return $true
 }
 
 function Update-ReplTurnCacheEdits {
     param([Parameter(Mandatory)][int]$Increment)
-    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return $false }
-    $lines = Get-Content -Path $turnFile
-    $current = 0
-    foreach ($l in $lines) {
-        if ($l -match '^codeEdits:\s*(\d+)') {
-            $current = [int]$Matches[1]
-            break
-        }
-    }
-    $new = $current + $Increment
-    $updated = $lines | ForEach-Object {
-        if ($_ -match '^codeEdits:') { "codeEdits: $new" } else { $_ }
-    }
-    Set-Content -Path $turnFile -Value $updated -NoNewline:$false
+    $state = Read-ReplCurrentTurnState
+    if (-not $state) { return $false }
+    $current = if ($state.Contains('codeEdits')) { [int]$state['codeEdits'] } else { 0 }
+    $state['codeEdits'] = $current + $Increment
+    Write-ReplCurrentTurnState -State $state
     return $true
 }
 
 function Get-ReplTurnCacheField {
     param([Parameter(Mandatory)][string]$Field)
-    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return '' }
-    $line = Select-String -Path $turnFile -Pattern "^${Field}:" |
-        Select-Object -First 1
-    if (-not $line) { return '' }
-    return ($line.Line -replace "^${Field}:\s*", '').Trim()
+    $state = Read-ReplCurrentTurnState
+    if (-not $state -or -not $state.Contains($Field) -or $null -eq $state[$Field]) { return '' }
+    return [string]$state[$Field]
+}
+
+function Set-ReplTurnCacheField {
+    param(
+        [Parameter(Mandatory)][string]$Field,
+        [Parameter(Mandatory)][string]$Value
+    )
+    $state = Read-ReplCurrentTurnState
+    if (-not $state) { return $false }
+    $state[$Field] = $Value
+    Write-ReplCurrentTurnState -State $state
+    return $true
 }
 
 function Get-ReplNormalizedActionsBlock {
@@ -792,26 +778,88 @@ function Get-ReplNormalizedActionsBlock {
 function Update-ReplTurnAudit {
     param([Parameter(Mandatory)][string]$Field, [int]$Increment = 0)
     if ($Increment -le 0) { return $false }
-    $turnFile = Join-Path (Get-ReplInvokeCacheDir) 'current-turn.yaml'
-    if (-not (Test-Path $turnFile)) { return $false }
-    $lines = Get-Content -Path $turnFile
-    $current = 0
-    foreach ($l in $lines) {
-        if ($l -match "^${Field}:\s*(\d+)") {
-            $current = [int]$Matches[1]
-            break
-        }
+    $state = Read-ReplCurrentTurnState
+    if (-not $state) { return $false }
+    $current = if ($state.Contains($Field)) { [int]$state[$Field] } else { 0 }
+    $state[$Field] = $current + $Increment
+    Write-ReplCurrentTurnState -State $state
+    return $true
+}
+
+function Get-ReplObjectValue {
+    param(
+        $InputObject,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $InputObject) { return $null }
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        if ($InputObject.Contains($Name)) { return $InputObject[$Name] }
+        return $null
     }
-    $new = $current + $Increment
-    $found = $false
-    $updated = $lines | ForEach-Object {
-        if ($_ -match "^${Field}:") { $found = $true; "${Field}: $new" } else { $_ }
+
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($property) { return $property.Value }
+    return $null
+}
+
+function Get-ReplParamString {
+    param(
+        [string]$ParamsYaml,
+        [Parameter(Mandatory)][string]$Name
+    )
+    if (-not $ParamsYaml) { return '' }
+    $params = Convert-ReplParamsYamlToObject -ParamsYaml $ParamsYaml
+    if (-not $params) { return '' }
+    $value = Get-ReplObjectValue -InputObject $params -Name $Name
+    if ($null -eq $value) { return '' }
+    return [string]$value
+}
+
+function Update-ReplTurnTitleFromParams {
+    param([string]$ParamsYaml)
+    $queryTitle = Get-ReplParamString -ParamsYaml $ParamsYaml -Name 'queryTitle'
+    if ([string]::IsNullOrWhiteSpace($queryTitle)) { return $false }
+    return Set-ReplTurnCacheField -Field 'queryTitle' -Value $queryTitle
+}
+
+function Assert-ReplCurrentTurnFresh {
+    param([Parameter(Mandatory)][string]$Method)
+
+    $turnFile = Get-ReplCurrentTurnFile
+    $turnState = Read-ReplCurrentTurnState
+    if (-not $turnState) { return $false }
+
+    $sessionFile = Join-Path (Get-ReplInvokeCacheDir) 'session-state.yaml'
+    $sessionState = Read-McpYamlObject -Path $sessionFile -Create
+    $workspace = Resolve-ReplWorkspaceDirectory
+    $snapshot = Get-MarkerFileSnapshot -StartDir $workspace
+
+    $staleReasons = @()
+    $turnSessionId = if ($turnState.Contains('sessionId')) { [string]$turnState['sessionId'] } else { '' }
+    $activeSessionId = if ($sessionState.Contains('sessionId')) { [string]$sessionState['sessionId'] } else { '' }
+    $turnMarkerPath = if ($turnState.Contains('markerFilePath')) { [string]$turnState['markerFilePath'] } else { '' }
+    $turnMarkerWriteUtc = if ($turnState.Contains('markerLastWriteUtc')) { [string]$turnState['markerLastWriteUtc'] } else { '' }
+
+    if ($turnSessionId -and $activeSessionId -and $turnSessionId -ne $activeSessionId) {
+        $staleReasons += 'sessionId'
     }
-    if (-not $found) {
-        # append if field missing (defensive; init should have written audits)
-        $updated += "${Field}: $new"
+    if ($turnMarkerPath -and $turnMarkerPath -ne $snapshot.markerFilePath) {
+        $staleReasons += 'markerFilePath'
     }
-    Set-Content -Path $turnFile -Value ($updated -join "`n") -NoNewline:$false
+    if ($turnMarkerWriteUtc -and $turnMarkerWriteUtc -ne $snapshot.markerLastWriteUtc) {
+        $staleReasons += 'markerLastWriteUtc'
+    }
+
+    if ($staleReasons.Count -gt 0) {
+        [Console]::Error.WriteLine("$Method rejected stale current-turn cache '$turnFile'. staleSessionId='$turnSessionId' activeSessionId='$activeSessionId' markerFilePath='$($snapshot.markerFilePath)' markerLastWriteUtc='$($snapshot.markerLastWriteUtc)' staleReasons='$($staleReasons -join ',')'. Run the active agent prompt hook again.")
+        return $false
+    }
+
+    if (-not $turnSessionId -and $activeSessionId) { $turnState['sessionId'] = $activeSessionId }
+    if (-not $turnMarkerPath) { $turnState['markerFilePath'] = $snapshot.markerFilePath }
+    if (-not $turnMarkerWriteUtc) { $turnState['markerLastWriteUtc'] = $snapshot.markerLastWriteUtc }
+    Write-ReplCurrentTurnState -State $turnState
     return $true
 }
 
@@ -820,6 +868,9 @@ function Invoke-WorkflowAppendActions {
     $turnFile = Get-ReplCurrentTurnFile
     if (-not (Test-Path $turnFile)) {
         return (Deny-ReplMissingCurrentTurn -Method 'workflow.sessionlog.appendActions')
+    }
+    if (-not (Assert-ReplCurrentTurnFresh -Method 'workflow.sessionlog.appendActions')) {
+        return $false
     }
 
     $added = 0
@@ -833,6 +884,7 @@ function Invoke-WorkflowAppendActions {
     }
 
     if ($ParamsYaml -and $ParamsYaml.Trim()) {
+        Update-ReplTurnTitleFromParams -ParamsYaml $ParamsYaml | Out-Null
         if ($added -gt 0) {
             Update-ReplTurnCacheEdits -Increment $added | Out-Null
         }
@@ -846,7 +898,7 @@ function Invoke-WorkflowAppendActions {
 
         $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
         $title = Get-ReplTurnCacheField -Field 'queryTitle'
-        Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
+        $null = Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
             -Status 'in_progress' -ResponseText 'Actions appended.' `
             -ActionsYaml $actionsBlock
     }
@@ -860,13 +912,10 @@ function Get-ReplDialogItemsFromParams {
     $params = Convert-ReplParamsYamlToObject -ParamsYaml $ParamsYaml
     if (-not $params) { return @() }
 
-    $propertyNames = @($params.PSObject.Properties.Name)
     $rawItems = @()
-    if ($propertyNames -contains 'dialogItems') {
-        $rawItems = @($params.dialogItems)
-    } elseif ($propertyNames -contains 'dialog') {
-        $rawItems = @($params.dialog)
-    }
+    $rawValue = Get-ReplObjectValue -InputObject $params -Name 'dialogItems'
+    if ($null -eq $rawValue) { $rawValue = Get-ReplObjectValue -InputObject $params -Name 'dialog' }
+    if ($null -ne $rawValue) { $rawItems = @($rawValue) }
 
     $items = @()
     foreach ($rawItem in $rawItems) {
@@ -895,18 +944,23 @@ function Invoke-WorkflowAppendDialog {
     if (-not (Test-Path $turnFile)) {
         return (Deny-ReplMissingCurrentTurn -Method 'workflow.sessionlog.appendDialog')
     }
-
-    $dialogItems = @(Get-ReplDialogItemsFromParams -ParamsYaml $ParamsYaml)
-    if ($dialogItems.Count -gt 0) {
-        Update-ReplTurnAudit -Field 'auditDialog' -Increment $dialogItems.Count | Out-Null
-        $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
-        $title = Get-ReplTurnCacheField -Field 'queryTitle'
-        Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
-            -Status 'in_progress' -ResponseText 'Dialog appended.' `
-            -ProcessingDialog $dialogItems
+    if (-not (Assert-ReplCurrentTurnFresh -Method 'workflow.sessionlog.appendDialog')) {
+        return $false
     }
 
-    return $true
+    $dialogItems = @(Get-ReplDialogItemsFromParams -ParamsYaml $ParamsYaml)
+    if ($dialogItems.Count -eq 0) {
+        [Console]::Error.WriteLine('workflow.sessionlog.appendDialog requires at least one valid dialogItems or dialog entry.')
+        return $false
+    }
+
+    Update-ReplTurnTitleFromParams -ParamsYaml $ParamsYaml | Out-Null
+    Update-ReplTurnAudit -Field 'auditDialog' -Increment $dialogItems.Count | Out-Null
+    $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
+    $title = Get-ReplTurnCacheField -Field 'queryTitle'
+    return [bool](Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
+        -Status 'in_progress' -ResponseText 'Dialog appended.' `
+        -ProcessingDialog $dialogItems)
 }
 
 function Invoke-WorkflowCompleteTurn {
@@ -915,14 +969,19 @@ function Invoke-WorkflowCompleteTurn {
     if (-not (Test-Path $turnFile)) {
         return (Deny-ReplMissingCurrentTurn -Method 'workflow.sessionlog.completeTurn')
     }
+    if (-not (Assert-ReplCurrentTurnFresh -Method 'workflow.sessionlog.completeTurn')) {
+        return $false
+    }
 
     $responseText = '(no response provided)'
     if ($ParamsYaml) {
         $params = Convert-ReplParamsYamlToObject -ParamsYaml $ParamsYaml
-        if ($params -and ($params.PSObject.Properties.Name -contains 'response')) {
-            $responseText = [string]$params.response
+        $responseValue = Get-ReplObjectValue -InputObject $params -Name 'response'
+        if ($null -ne $responseValue) {
+            $responseText = [string]$responseValue
         }
     }
+    Update-ReplTurnTitleFromParams -ParamsYaml $ParamsYaml | Out-Null
 
     $actionsBlock = ''
     if ($ParamsYaml -and ($ParamsYaml -match '(?m)^\s*actions:' -or $ParamsYaml -match '(?m)^\s*actions:\s*\S')) {
@@ -933,9 +992,21 @@ function Invoke-WorkflowCompleteTurn {
 
     $reqId = Get-ReplTurnCacheField -Field 'turnRequestId'
     $title = Get-ReplTurnCacheField -Field 'queryTitle'
-    Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
+    $persisted = [bool](Invoke-ReplPersistTurn -RequestId $reqId -Title $title `
         -Status 'completed' -ResponseText $responseText -ActionsYaml $actionsBlock
-    return $true
+    )
+    if ($persisted -and $script:LastReplPersistenceDetails) {
+        $degraded = Get-ReplObjectValue -InputObject $script:LastReplPersistenceDetails -Name 'degraded'
+        if ($degraded -eq $true) {
+            $message = [string](Get-ReplObjectValue -InputObject $script:LastReplPersistenceDetails -Name 'message')
+            $failsafePath = [string](Get-ReplObjectValue -InputObject $script:LastReplPersistenceDetails -Name 'failsafePath')
+            if ([string]::IsNullOrWhiteSpace($message)) {
+                $message = 'MCP Session Log persistence is degraded.'
+            }
+            [Console]::Error.WriteLine("$message FailsafePath='$failsafePath'.")
+        }
+    }
+    return $persisted
 }
 
 function Invoke-ReplMethod {
@@ -945,12 +1016,16 @@ function Invoke-ReplMethod {
         [string]$ParamsYaml = ''
     )
 
+    # Local plugin-shim verbs: record the boolean outcome on the script-scoped
+    # success flag (so the script-entry exit code is truthful) and return without
+    # emitting the boolean to stdout. Emitting it leaked "True" lines, and leaving
+    # the flag unset made the script-entry exit 1 even on a successful persist.
     switch -Wildcard ($Method) {
-        'workflow.sessionlog.beginTurn'       { return $true }
-        'workflow.sessionlog.openSession'     { return $true }
-        'workflow.sessionlog.appendActions'   { return Invoke-WorkflowAppendActions -ParamsYaml $ParamsYaml }
-        'workflow.sessionlog.appendDialog'    { return Invoke-WorkflowAppendDialog -ParamsYaml $ParamsYaml }
-        'workflow.sessionlog.completeTurn'    { return Invoke-WorkflowCompleteTurn -ParamsYaml $ParamsYaml }
+        'workflow.sessionlog.beginTurn'       { $script:LastInvokeReplMethodSuccess = $true; return }
+        'workflow.sessionlog.openSession'     { $script:LastInvokeReplMethodSuccess = $true; return }
+        'workflow.sessionlog.appendActions'   { $script:LastInvokeReplMethodSuccess = [bool](Invoke-WorkflowAppendActions -ParamsYaml $ParamsYaml); return }
+        'workflow.sessionlog.appendDialog'    { $script:LastInvokeReplMethodSuccess = [bool](Invoke-WorkflowAppendDialog -ParamsYaml $ParamsYaml); return }
+        'workflow.sessionlog.completeTurn'    { $script:LastInvokeReplMethodSuccess = [bool](Invoke-WorkflowCompleteTurn -ParamsYaml $ParamsYaml); return }
     }
 
     $r = Invoke-ReplRaw -Method $Method -ParamsYaml $ParamsYaml
