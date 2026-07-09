@@ -63,6 +63,8 @@ When MCP server is unavailable, writes are cached as YAML files in `cache/pendin
 
 Items retry up to 3 times before being marked as failed.
 
+Session-log writes use an additional failsafe boundary in `cache/failsafe/`: the exact YAML payload is written before the normal REPL submission and is deleted only after MCP reports success. A failed submission leaves the file in place and includes its path in the error so the turn can be replayed.
+
 ## Development
 
 ```bash

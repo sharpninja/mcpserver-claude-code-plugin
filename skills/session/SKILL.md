@@ -381,6 +381,7 @@ The following patterns are redacted from all extracted text before logging:
 ## Implementation Notes
 
 - Use `Invoke-McpPlugin.ps1` from `lib/repl-invoke.ps1` to build and dispatch envelopes.
+- Session-log upserts are failsafe-first: build the payload, serialize it with `ConvertTo-Yaml`, write that YAML under the failsafe directory, submit the same YAML through the normal REPL path, and delete the failsafe file only after MCP reports success. A failed submission must retain the file and report its path.
 - Generate request IDs with the current UTC timestamp to guarantee uniqueness: `req-$(date -u +%Y%m%dT%H%M%SZ)-<slug>`.
 - Post `beginTurn` before starting any work on a user request; post `completeTurn` or `failTurn` after work ends. Never defer these calls.
 - Log all design decisions in `appendDialog` with `category: decision` AND in `appendActions` with `type: design_decision`.
