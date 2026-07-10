@@ -1,6 +1,6 @@
 ---
 name: Wrap-Up
-description: 'Use when asked to "wrap up", "export requirements", or "close out" MCP-backed work: reconcile MCP requirements, export wiki documents, run validation, commit and push via the commit-sync contract, reconcile the session log, and complete the turn.'
+description: 'Use when asked to "wrap up", "export requirements", or "close out" MCP-backed work: reconcile MCP requirements, export wiki documents, run validation, commit and push with an appropriate commit message, reconcile the session log, and complete the turn.'
 version: 0.1.0
 ---
 
@@ -25,6 +25,6 @@ pwsh.exe -NoProfile -NonInteractive -File "<plugin-root>\lib\repl-invoke.ps1" -M
 1. Reconcile requirements with `workflow.requirements.*`, including requirement reconciliation for new FR/TR/TEST evidence.
 2. Export wiki requirements with `workflow.requirements.generateDocument` using `format: wiki` and `docType: all`.
 3. Run validation commands and keep zero-failure zero-skip evidence.
-4. If commit/push is required, use the `commit-sync` pause and acknowledgement contract first.
+4. If commit/push is required, apply an appropriate commit message and sync with origin.
 5. Perform session-log reconciliation with `workflow.sessionlog.appendDialog` and `workflow.sessionlog.appendActions`.
 6. Finish with `workflow.sessionlog.completeTurn`; use `workflow.sessionlog.failTurn` when validation, export, or commit/push cannot be completed (validation failure, export failure, or blocked commit/push).

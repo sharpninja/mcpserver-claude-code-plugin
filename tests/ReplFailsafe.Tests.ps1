@@ -31,7 +31,7 @@ sessionId: TestAgent-20260709T000000Z-plugin-session
         }
     }
 
-    It 'submits the canonical persistTurn snapshot and accepts a durable result' {
+    It 'submits the canonical SubmitAsync snapshot and accepts a durable result' {
         . (Join-Path $PSScriptRoot '..\lib\repl-invoke.ps1')
         function Invoke-ReplRaw {
             param([Parameter(Mandatory)][string]$Method, [string]$ParamsYaml = '')
@@ -52,7 +52,7 @@ sessionId: TestAgent-20260709T000000Z-plugin-session
             -ResponseText 'completed'
 
         $result | Should -BeTrue
-        $script:ObservedMethod | Should -Be 'repl.sessionlog.persistTurn'
+        $script:ObservedMethod | Should -Be 'client.SessionLog.SubmitAsync'
         $script:ObservedPayload | Should -Match 'sessionLog'
         $script:LastReplPersistenceDetails.persisted | Should -BeTrue
     }
