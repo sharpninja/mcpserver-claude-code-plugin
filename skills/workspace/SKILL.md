@@ -32,11 +32,10 @@ If the target workspace has no marker or the marker is untrusted, use another tr
 
 ```powershell
 cd /f/GitHub/McpServer
-export CLAUDE_PLUGIN_ROOT=/f/GitHub/mcpserver-claude-code-plugin
-export PLUGIN_ROOT_OVERRIDE="$CLAUDE_PLUGIN_ROOT"
-source "$CLAUDE_PLUGIN_ROOT/lib/marker-resolver.ps1"
+export MCP_PLUGIN_ROOT=/f/GitHub/mcpserver-claude-code-plugin
+source "$MCP_PLUGIN_ROOT/lib/marker-resolver.ps1"
 full_bootstrap /f/GitHub/McpServer
-source "$CLAUDE_PLUGIN_ROOT/lib/repl-invoke.ps1"
+source "$MCP_PLUGIN_ROOT/lib/repl-invoke.ps1"
 Invoke-McpPlugin.ps1 "client.Workspace.ListAsync" ""
 ```
 
