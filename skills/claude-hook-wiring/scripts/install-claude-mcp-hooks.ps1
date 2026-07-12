@@ -80,6 +80,109 @@ function Get-HookScriptNameFromCommand {
 
     return $match.Groups['script'].Value
 }
+function Get-RequiredHookSpecs {
+    return @(
+        @{ EventName = 'UserPromptSubmit'; ScriptName = 'user-prompt-submit.ps1' },
+        @{ EventName = 'Stop'; ScriptName = 'stop-gate.ps1' },
+        @{ EventName = 'PostToolUse'; ScriptName = 'code-verify.ps1' }
+    )
+}
+
+function Get-PluginName {
+    param([Parameter(Mandatory)][string]$PluginRoot)
+
+    $manifestPath = Join-Path $PluginRoot '.claude-plugin/plugin.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        $manifest = Read-JsonObject -Path $manifestPath
+        if ($manifest.Contains('name') -and -not [string]::IsNullOrWhiteSpace([string]$manifest['name'])) {
+            return [string]$manifest['name']
+        }
+    }
+
+    return Split-Path -Leaf $PluginRoot
+}
+
+function Test-PluginEnabled {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Settings,
+        [Parameter(Mandatory)][string]$PluginRoot
+    )
+
+    $pluginName = Get-PluginName -PluginRoot $PluginRoot
+    if ($Settings.Contains('enabledPlugins')) {
+        foreach ($entry in @($Settings['enabledPlugins'])) {
+            $value = [string]$entry
+            if ([string]::Equals($value, $pluginName, [System.StringComparison]::OrdinalIgnoreCase) -or
+                [string]::Equals($value, 'mcpserver', [System.StringComparison]::OrdinalIgnoreCase) -or
+                [string]::Equals($value, $PluginRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CLAUDE_PLUGIN_ROOT)) {
+        try {
+            $envRoot = (Resolve-Path -LiteralPath $env:CLAUDE_PLUGIN_ROOT -ErrorAction Stop).ProviderPath
+            $pluginRootFull = (Resolve-Path -LiteralPath $PluginRoot -ErrorAction Stop).ProviderPath
+            return [string]::Equals($envRoot.TrimEnd('\'), $pluginRootFull.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+        } catch {
+            return $false
+        }
+    }
+
+    return $false
+}
+
+function Test-HooksContainScript {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Hooks,
+        [Parameter(Mandatory)][string]$EventName,
+        [Parameter(Mandatory)][string]$ScriptName
+    )
+
+    if (-not $Hooks.Contains($EventName)) {
+        return $false
+    }
+
+    foreach ($group in @($Hooks[$EventName])) {
+        if ($group -isnot [System.Collections.IDictionary] -or -not $group.Contains('hooks')) {
+            continue
+        }
+
+        foreach ($hook in @($group['hooks'])) {
+            if ($hook -isnot [System.Collections.IDictionary] -or -not $hook.Contains('command')) {
+                continue
+            }
+
+            $candidate = Get-HookScriptNameFromCommand -Command ([string]$hook['command'])
+            if ([string]::Equals($candidate, $ScriptName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Test-PluginHookCoverage {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Settings,
+        [Parameter(Mandatory)][string]$PluginRoot,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$PluginHooks
+    )
+
+    if (-not (Test-PluginEnabled -Settings $Settings -PluginRoot $PluginRoot)) {
+        return $false
+    }
+
+    foreach ($requirement in Get-RequiredHookSpecs) {
+        if (-not (Test-HooksContainScript -Hooks $PluginHooks -EventName $requirement.EventName -ScriptName $requirement.ScriptName)) {
+            return $false
+        }
+    }
+
+    return $true
+}
 
 function New-StableHookCommand {
     param(
@@ -246,6 +349,30 @@ if (-not $pluginHooksDocument.Contains('hooks') -or $pluginHooksDocument['hooks'
 
 if (-not $settings.Contains('hooks') -or $settings['hooks'] -isnot [System.Collections.IDictionary]) {
     $settings['hooks'] = [ordered]@{}
+}
+
+$pluginHooksCoverRequired = Test-PluginHookCoverage -Settings $settings -PluginRoot $pluginRootFull -PluginHooks $pluginHooksDocument['hooks']
+if ($pluginHooksCoverRequired) {
+    Remove-ManagedHookCommands -TargetHooks $settings['hooks']
+    if (-not $VerifyOnly) {
+        if ((Test-Path -LiteralPath $SettingsPath -PathType Leaf) -and -not $NoBackup) {
+            $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+            Copy-Item -LiteralPath $SettingsPath -Destination "$SettingsPath.bak-$timestamp" -Force
+        }
+
+        $json = ($settings | ConvertTo-Json -Depth 100)
+        $json = $json.Replace("`r`n", "`n").Replace("`r", "`n") + "`n"
+        [System.IO.File]::WriteAllText($SettingsPath, $json, [System.Text.UTF8Encoding]::new($false))
+    }
+
+    [ordered]@{
+        status = if ($VerifyOnly) { 'verified' } else { 'plugin-hooks' }
+        settingsPath = (Resolve-Path -LiteralPath $SettingsPath).ProviderPath
+        pluginHooksPath = $pluginHooksPath
+        bridgePath = ''
+        addedHookGroups = 0
+    } | ConvertTo-Json -Depth 10 -Compress
+    return
 }
 
 Remove-ManagedHookCommands -TargetHooks $settings['hooks']
