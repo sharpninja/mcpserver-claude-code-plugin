@@ -12,19 +12,41 @@ Describe 'Open-PluginTurn duplicate-prompt dedupe' {
             MCP_AGENT_NAME = $env:MCP_AGENT_NAME
             MCP_PLUGIN_REPL_LOG = $env:MCP_PLUGIN_REPL_LOG
             MCP_PLUGIN_REPL_RESPONSE = $env:MCP_PLUGIN_REPL_RESPONSE
+            MCP_WORKSPACE_START_DIR = $env:MCP_WORKSPACE_START_DIR
         }
 
         $script:TestRoot = Join-Path $env:TEMP ('mcp-hook-dedupe-' + [guid]::NewGuid().ToString('N'))
         [void][System.IO.Directory]::CreateDirectory($script:TestRoot)
         $env:MCP_CACHE_DIR_OVERRIDE = $script:TestRoot
-        $env:MCP_AGENT_NAME = 'TestAgent'
+        # plugin-env.ps1 forces the host identity (claude-code -> ClaudeCode) onto MCP_AGENT_NAME on
+        # every hook load, so the seeded session-state agent below must match that host identity or
+        # Test-PluginSessionStateValid rejects it and a live Start-PluginSession bootstrap is attempted.
+        $env:MCP_AGENT_NAME = 'ClaudeCode'
         $env:MCP_PLUGIN_REPL_LOG = Join-Path $script:TestRoot 'repl-log.txt'
         $env:MCP_PLUGIN_REPL_RESPONSE = "type: result`npayload:`n  result:`n    ok: true`n"
 
+        # Hermetic marker: seed a self-contained AGENTS-README-FIRST.yaml in the test root and pin
+        # the workspace start-path to it, so Ensure-PluginMarkerFresh's Get-MarkerFileSnapshot resolves
+        # locally (never walks up to a real workspace marker, never triggers a live health bootstrap).
+        # The session-state records the exact marker path + LastWriteTimeUtc so the freshness check
+        # matches and no Start-PluginSession (which would hit the network) is attempted.
+        $markerPath = Join-Path $script:TestRoot 'AGENTS-README-FIRST.yaml'
+        [System.IO.File]::WriteAllText($markerPath, @"
+workspace: TestWorkspace
+workspacePath: $script:TestRoot
+baseUrl: http://127.0.0.1:59999/mcpserver
+apiKey: test-marker-key
+"@.Trim() + "`n")
+        $env:MCP_WORKSPACE_START_DIR = $script:TestRoot
+        $resolvedMarker = (Resolve-Path -LiteralPath $markerPath).ProviderPath
+        $markerMtime = (Get-Item -LiteralPath $resolvedMarker).LastWriteTimeUtc.ToString('O')
+
         [System.IO.File]::WriteAllText((Join-Path $script:TestRoot 'session-state.yaml'), @"
-sessionId: TestAgent-20260714T000000Z-plugin-session
-agent: TestAgent
+sessionId: ClaudeCode-20260714T000000Z-plugin-session
+agent: ClaudeCode
 status: verified
+markerFilePath: '$resolvedMarker'
+markerLastWriteUtc: '$markerMtime'
 "@.Trim() + "`n")
         $openedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
         [System.IO.File]::WriteAllText((Join-Path $script:TestRoot 'current-turn.yaml'), @"
@@ -33,7 +55,7 @@ queryTitle: process triage reports and fix them.
 queryText: process triage reports and fix them.
 openedAt: $openedAt
 status: in_progress
-sessionId: TestAgent-20260714T000000Z-plugin-session
+sessionId: ClaudeCode-20260714T000000Z-plugin-session
 "@.Trim() + "`n")
     }
 
