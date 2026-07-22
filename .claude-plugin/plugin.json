@@ -1,6 +1,6 @@
 {
   "name": "mcpserver",
-  "version": "1.74.0",
+  "version": "1.82.0",
   "description": "Connect Claude Code to McpServer for TODO management, session logging, requirements tracking, GraphRAG knowledge graph operations, and per-turn \u002B build-verification enforcement hooks.",
   "author": {
     "name": "Payton Byrd (The Sharp Ninja)",
