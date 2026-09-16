@@ -2,11 +2,15 @@
 
 $script:OriginalCacheOverride = $env:MCP_CACHE_DIR_OVERRIDE
 $script:OriginalAgentName = $env:MCP_AGENT_NAME
+$script:OriginalFailsafeDir = $env:MCPSERVER_FAILSAFE_DIR
 
 Describe 'REPL session-log persistence bridge' {
     BeforeEach {
         $script:TestRoot = Join-Path $env:TEMP ('mcp-repl-persistence-test-' + [guid]::NewGuid().ToString('N'))
         [void][System.IO.Directory]::CreateDirectory($script:TestRoot)
+        $script:FailsafeDir = Join-Path $script:TestRoot 'failsafe-pending'
+        [void][System.IO.Directory]::CreateDirectory($script:FailsafeDir)
+        $env:MCPSERVER_FAILSAFE_DIR = $script:FailsafeDir
         [System.IO.File]::WriteAllText((Join-Path $script:TestRoot 'session-state.yaml'), @"
 sessionId: TestAgent-20260709T000000Z-plugin-session
 agent: TestAgent
@@ -26,6 +30,11 @@ sessionId: TestAgent-20260709T000000Z-plugin-session
     }
 
     AfterEach {
+        if ($null -ne $script:OriginalFailsafeDir) {
+            $env:MCPSERVER_FAILSAFE_DIR = $script:OriginalFailsafeDir
+        } else {
+            Remove-Item -LiteralPath Env:MCPSERVER_FAILSAFE_DIR -ErrorAction SilentlyContinue
+        }
         if (Test-Path -LiteralPath $script:TestRoot) {
             Remove-Item -LiteralPath $script:TestRoot -Recurse -Force
         }
@@ -99,3 +108,8 @@ payload:
 
 $env:MCP_CACHE_DIR_OVERRIDE = $script:OriginalCacheOverride
 $env:MCP_AGENT_NAME = $script:OriginalAgentName
+if ($null -ne $script:OriginalFailsafeDir) {
+    $env:MCPSERVER_FAILSAFE_DIR = $script:OriginalFailsafeDir
+} else {
+    Remove-Item -LiteralPath Env:MCPSERVER_FAILSAFE_DIR -ErrorAction SilentlyContinue
+}

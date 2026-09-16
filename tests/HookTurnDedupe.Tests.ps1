@@ -23,6 +23,7 @@ Describe 'Open-PluginTurn duplicate-prompt dedupe' {
         # Test-PluginSessionStateValid rejects it and a live Start-PluginSession bootstrap is attempted.
         $env:MCP_AGENT_NAME = 'ClaudeCode'
         $env:MCP_PLUGIN_REPL_LOG = Join-Path $script:TestRoot 'repl-log.txt'
+        [System.IO.File]::WriteAllText($env:MCP_PLUGIN_REPL_LOG, '')
         $env:MCP_PLUGIN_REPL_RESPONSE = "type: result`npayload:`n  result:`n    ok: true`n"
 
         # Hermetic marker: seed a self-contained AGENTS-README-FIRST.yaml in the test root and pin
@@ -78,6 +79,7 @@ sessionId: ClaudeCode-20260714T000000Z-plugin-session
             -HookName 'user-prompt-submit' `
             -HostName 'claude-code' `
             -CacheMode 'flat' `
+            -WorkspacePath $script:TestRoot `
             -Params $params 2>&1 | Out-String
 
         $output | Should -Match 'turn-already-open'
@@ -94,9 +96,11 @@ sessionId: ClaudeCode-20260714T000000Z-plugin-session
             -HookName 'user-prompt-submit' `
             -HostName 'claude-code' `
             -CacheMode 'flat' `
+            -WorkspacePath $script:TestRoot `
             -Params $params 2>&1 | Out-String
 
         $output | Should -Not -Match 'turn-already-open'
-        (Get-Content -LiteralPath $env:MCP_PLUGIN_REPL_LOG -Raw) | Should -Match 'beginTurn'
+        $log = if (Test-Path -LiteralPath $env:MCP_PLUGIN_REPL_LOG) { [System.IO.File]::ReadAllText($env:MCP_PLUGIN_REPL_LOG) } else { '' }
+        $log | Should -Match 'beginTurn'
     }
 }
