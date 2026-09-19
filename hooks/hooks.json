@@ -55,8 +55,8 @@
           {
             "type": "command",
             "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.ps1\"",
-            "timeout": 10,
-            "statusMessage": "Opening session log turn..."
+            "timeout": 20,
+            "statusMessage": "Opening session log turn and injecting required memories..."
           }
         ]
       }

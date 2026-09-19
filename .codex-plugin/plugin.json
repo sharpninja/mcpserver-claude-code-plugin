@@ -37,7 +37,7 @@
       {
         "type": "command",
         "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.ps1\u0022",
-        "timeout": 10
+        "timeout": 20
       }
     ],
     "taskComplete": [
