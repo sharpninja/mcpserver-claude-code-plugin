@@ -125,12 +125,18 @@ if ('user-prompt-submit' -eq 'code-verify') {
     exit $process.ExitCode
 }
 
-$hookOutput = @(& $hookScript @hookArguments @RemainingArguments)
+$hookOutput = @()
 $hookExit = 0
-if (Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue) {
-    if ($null -ne $global:LASTEXITCODE) {
-        $hookExit = [int]$global:LASTEXITCODE
+try {
+    $hookOutput = @(& $hookScript @hookArguments @RemainingArguments)
+    if (Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue) {
+        if ($null -ne $global:LASTEXITCODE) {
+            $hookExit = [int]$global:LASTEXITCODE
+        }
     }
+} catch {
+    [Console]::Error.WriteLine("user-prompt-submit hook failed: $($_.Exception.Message)")
+    $hookExit = 0
 }
 
 $mergedOutput = ($hookOutput | Out-String).TrimEnd()

@@ -92,21 +92,22 @@ function Get-McpMemoryDescriptor {
     $json = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json -Depth 20
     $prefix = 'REQUIRED MEMORIES -'
     $empty = 'REQUIRED MEMORIES - None.'
-    if ($json.injection -and $json.injection.requiredMemoriesPrefix) {
-        $prefix = [string]$json.injection.requiredMemoriesPrefix
-    }
-    if ($json.injection -and $json.injection.emptyFallback) {
-        $empty = [string]$json.injection.emptyFallback
-    }
+    $injection = Get-McpMemoryNoteProperty -Object $json -Name 'injection'
+    $requiredPrefix = Get-McpMemoryNoteProperty -Object $injection -Name 'requiredMemoriesPrefix'
+    $emptyFallback = Get-McpMemoryNoteProperty -Object $injection -Name 'emptyFallback'
+    if ($requiredPrefix) { $prefix = [string]$requiredPrefix }
+    if ($emptyFallback) { $empty = [string]$emptyFallback }
 
     $methods = [ordered]@{}
-    if ($json.workflowMethods) {
-        foreach ($prop in $json.workflowMethods.PSObject.Properties) {
+    $workflowMethods = Get-McpMemoryNoteProperty -Object $json -Name 'workflowMethods'
+    if ($workflowMethods) {
+        foreach ($prop in $workflowMethods.PSObject.Properties) {
             $methods[[string]$prop.Name] = [string]$prop.Value
         }
     }
+    $tools = @(Get-McpMemoryNoteProperty -Object $json -Name 'tools')
     if ($methods.Count -eq 0) {
-        foreach ($tool in @($json.tools)) {
+        foreach ($tool in $tools) {
             $name = [string]$tool
             if ($name -match '^memory_(?<verb>.+)$') {
                 $methods[$name] = 'workflow.memory.{0}' -f $Matches['verb']
@@ -114,8 +115,9 @@ function Get-McpMemoryDescriptor {
         }
     }
 
+    $fallback = Get-McpMemoryNoteProperty -Object $json -Name 'fallback'
     return [ordered]@{
-        host = [string]$json.host
+        host = [string](Get-McpMemoryNoteProperty -Object $json -Name 'host')
         path = $path
         loaded = $true
         injection = [ordered]@{
@@ -123,12 +125,29 @@ function Get-McpMemoryDescriptor {
             emptyFallback = $empty
         }
         fallback = [ordered]@{
-            localFailsafe = [bool]($json.fallback.localFailsafe)
-            replayAfterAck = [bool]($json.fallback.replayAfterAck)
+            localFailsafe = [bool](Get-McpMemoryNoteProperty -Object $fallback -Name 'localFailsafe')
+            replayAfterAck = [bool](Get-McpMemoryNoteProperty -Object $fallback -Name 'replayAfterAck')
         }
-        tools = @($json.tools)
+        tools = $tools
         workflowMethods = $methods
     }
+}
+
+function Get-McpMemoryNoteProperty {
+    param(
+        $Object,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
+
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -eq $prop) { return $null }
+    return $prop.Value
 }
 
 function Resolve-McpMemoryWorkflowMethod {

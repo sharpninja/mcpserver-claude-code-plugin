@@ -23,7 +23,7 @@ Describe 'UserPromptSubmit required-memory injection' {
             MCP_PLUGIN_HOST = $env:MCP_PLUGIN_HOST
         }
 
-        $script:TestRoot = Join-Path $env:TEMP ('mcp-memory-inject-' + [guid]::NewGuid().ToString('N'))
+        $script:TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-memory-inject-' + [guid]::NewGuid().ToString('N'))
         [void][System.IO.Directory]::CreateDirectory($script:TestRoot)
         $env:MCP_PLUGIN_ROOT = $script:PluginRoot
         $env:MCP_PLUGIN_HOST = 'claude-code'
