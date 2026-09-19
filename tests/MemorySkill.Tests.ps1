@@ -15,6 +15,10 @@ Describe 'Claude Code memory skill and descriptor' {
         $content | Should -Match 'memory_explore'
         $content | Should -Match 'memory_consolidate'
         $content | Should -Match 'memory_promote'
+        $content | Should -Match 'workflow\.memory\.remember'
+        $content | Should -Match 'workflow\.memory\.list'
+        $content | Should -Match 'lib/repl-invoke\.ps1'
+        $content | Should -Match 'does not register native MCP'
         $content | Should -Match 'injection'
         $content | Should -Match 'fallback'
         $content | Should -Not -Match '(?i)sk-|[A-Za-z0-9]{32,}api.key'
@@ -26,6 +30,8 @@ Describe 'Claude Code memory skill and descriptor' {
         $json.host | Should -Be 'claude-code'
         $json.tools | Should -Contain 'memory_remember'
         $json.tools | Should -Contain 'memory_recall'
+        $json.workflowMethods.memory_remember | Should -Be 'workflow.memory.remember'
+        $json.workflowMethods.memory_list | Should -Be 'workflow.memory.list'
         $json.injection.requiredMemoriesPrefix | Should -Not -BeNullOrEmpty
         $json.fallback.localFailsafe | Should -BeTrue
     }
