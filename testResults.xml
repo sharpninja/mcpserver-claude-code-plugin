@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="1" errors="0" failures="1" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2026-08-22" time="05:20:14">
+  <environment platform="Microsoft Windows 11 Pro|C:\WINDOWS|\Device\Harddisk1\Partition3" user-domain="PAYTON-LEGION2" nunit-version="2.5.8.0" clr-version="10.0.10" cwd="F:\GitHub\mcpserver-claude-code-plugin" machine-name="" os-version="10.0.26200" user="kingd" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="2.1705" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="F:\GitHub\mcpserver-claude-code-plugin\tests\CurrentTurnSessionRebind.Tests.ps1" executed="True" result="Failure" success="False" time="2.1705" asserts="0" description="F:\GitHub\mcpserver-claude-code-plugin\tests\CurrentTurnSessionRebind.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Assert-ReplCurrentTurnFresh session rotation re-bind" executed="True" result="Failure" success="False" time="1.2894" asserts="0" description="Assert-ReplCurrentTurnFresh session rotation re-bind">
+            <results>
+              <test-case description="returns fresh and re-binds the turn to the active session id after rotation" name="Assert-ReplCurrentTurnFresh session rotation re-bind.returns fresh and re-binds the turn to the active session id after rotation" time="0.8611" asserts="0" success="False" result="Failure" executed="True">
+                <failure>
+                  <message>Expected strings to be the same, but they were different.
+String lengths are both 42.
+Strings differ at index 21.
+Expected: 'ClaudeCode-20260716T020000Z-plugin-session'
+But was:  'ClaudeCode-20260716T010000Z-plugin-session'
+           ---------------------^</message>
+                  <stack-trace>at [string]$turn['sessionId'] | Should -Be 'ClaudeCode-20260716T020000Z-plugin-session', F:\GitHub\mcpserver-claude-code-plugin\tests\CurrentTurnSessionRebind.Tests.ps1:51
+at &lt;ScriptBlock&gt;, F:\GitHub\mcpserver-claude-code-plugin\tests\CurrentTurnSessionRebind.Tests.ps1:51</stack-trace>
+                </failure>
+              </test-case>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
