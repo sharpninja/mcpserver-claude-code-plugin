@@ -1,6 +1,6 @@
-# McpServer Claude Code Plugin
+# QBrain.AI Claude Code Plugin
 
-Connect [Claude Code](https://claude.com/claude-code) to [McpServer](https://github.com/sharpninja/McpServer) for workspace-scoped TODO management, session logging, requirements tracking, and GraphRAG knowledge graph operations.
+Connect [Claude Code](https://claude.com/claude-code) to [QBrain.AI](https://github.com/sharpninja/McpServer) for workspace-scoped TODO management, session logging, requirements tracking, and GraphRAG knowledge graph operations.
 
 ## Features
 
@@ -14,9 +14,9 @@ Connect [Claude Code](https://claude.com/claude-code) to [McpServer](https://git
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download)
 - [GitHub CLI](https://cli.github.com/) (`gh`) — authenticated
-- [McpServer](https://github.com/sharpninja/McpServer) running with a workspace configured
+- [QBrain.AI](https://github.com/sharpninja/McpServer) running with a workspace configured
 
-The plugin auto-installs `mcpserver-repl` (dotnet global tool) from GitHub releases on first use.
+The plugin uses `qbrain-ai-repl` when it is installed and otherwise `mcpserver-repl`. It auto-installs a REPL (dotnet global tool) from GitHub releases on first use.
 
 ## Installation
 
