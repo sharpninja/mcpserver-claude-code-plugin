@@ -15,17 +15,20 @@ Describe 'Close-PluginTurnIfNeeded hardening' {
         }
         $env:CLAUDE_STOP_HOOK_ACTIVE = $null
 
-        $script:TestRoot = Join-Path $env:TEMP ('mcp-stopgate-' + [guid]::NewGuid().ToString('N'))
+        $script:TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-stopgate-' + [guid]::NewGuid().ToString('N'))
         [void][System.IO.Directory]::CreateDirectory($script:TestRoot)
         $env:MCP_CACHE_DIR_OVERRIDE = $script:TestRoot
         $env:MCP_AGENT_NAME = 'TestAgent'
         $env:MCP_PLUGIN_REPL_LOG = Join-Path $script:TestRoot 'repl-log.txt'
         $env:MCP_PLUGIN_REPL_RESPONSE = "type: result`npayload:`n  result:`n    ok: true`n"
 
+        # TEST-MCP-PLUGIN-011 (amended 2026-10-15; triage-report-58f224bf): the session is fresh, so the stop gate's
+        # 24-hour session-age rule does not decide these cases.
         [System.IO.File]::WriteAllText((Join-Path $script:TestRoot 'session-state.yaml'), @"
 sessionId: TestAgent-20260714T000000Z-plugin-session
 agent: TestAgent
 status: verified
+lastUpdated: $((Get-Date).ToUniversalTime().ToString('o'))
 "@.Trim() + "`n")
     }
 

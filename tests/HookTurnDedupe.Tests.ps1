@@ -15,7 +15,7 @@ Describe 'Open-PluginTurn duplicate-prompt dedupe' {
             MCP_WORKSPACE_START_DIR = $env:MCP_WORKSPACE_START_DIR
         }
 
-        $script:TestRoot = Join-Path $env:TEMP ('mcp-hook-dedupe-' + [guid]::NewGuid().ToString('N'))
+        $script:TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-hook-dedupe-' + [guid]::NewGuid().ToString('N'))
         [void][System.IO.Directory]::CreateDirectory($script:TestRoot)
         $env:MCP_CACHE_DIR_OVERRIDE = $script:TestRoot
         # plugin-env.ps1 forces the host identity (claude-code -> ClaudeCode) onto MCP_AGENT_NAME on
