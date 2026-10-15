@@ -69,12 +69,26 @@ function Test-PluginEnabled {
 
     $pluginName = Get-PluginName -PluginRoot $PluginRoot
     if ($Settings.Contains('enabledPlugins')) {
-        foreach ($entry in @($Settings['enabledPlugins'])) {
-            $value = [string]$entry
-            if ([string]::Equals($value, $pluginName, [System.StringComparison]::OrdinalIgnoreCase) -or
-                [string]::Equals($value, 'mcpserver', [System.StringComparison]::OrdinalIgnoreCase) -or
-                [string]::Equals($value, $PluginRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-                return $true
+        $enabledPlugins = $Settings['enabledPlugins']
+        if ($enabledPlugins -is [System.Collections.IDictionary]) {
+            # Claude Code writes enabledPlugins as an object of "<plugin>@<marketplace>": true|false (TR-MCP-PLUGIN-013 AC-004).
+            foreach ($key in $enabledPlugins.Keys) {
+                $name = ([string]$key) -replace '@[^@]*$', ''
+                $enabled = $enabledPlugins[$key]
+                if ($enabled -is [bool] -and $enabled -and
+                    ([string]::Equals($name, $pluginName, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    [string]::Equals($name, 'mcpserver', [System.StringComparison]::OrdinalIgnoreCase))) {
+                    return $true
+                }
+            }
+        } else {
+            foreach ($entry in @($enabledPlugins)) {
+                $value = [string]$entry
+                if ([string]::Equals($value, $pluginName, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    [string]::Equals($value, 'mcpserver', [System.StringComparison]::OrdinalIgnoreCase) -or
+                    [string]::Equals($value, $PluginRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
             }
         }
     }
