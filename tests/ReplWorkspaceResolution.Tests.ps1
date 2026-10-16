@@ -22,9 +22,9 @@ Describe 'Resolve-ReplWorkspaceDirectory precedence' {
         }
 
         $script:SavedLocation = (Get-Location).Path
-        $script:WorkspaceA = Join-Path $env:TEMP ('mcp-ws-a-' + [guid]::NewGuid().ToString('N'))
-        $script:WorkspaceB = Join-Path $env:TEMP ('mcp-ws-b-' + [guid]::NewGuid().ToString('N'))
-        $script:MarkerlessDir = Join-Path $env:TEMP ('mcp-ws-none-' + [guid]::NewGuid().ToString('N'))
+        $script:WorkspaceA = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-ws-a-' + [guid]::NewGuid().ToString('N'))
+        $script:WorkspaceB = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-ws-b-' + [guid]::NewGuid().ToString('N'))
+        $script:MarkerlessDir = Join-Path ([System.IO.Path]::GetTempPath()) ('mcp-ws-none-' + [guid]::NewGuid().ToString('N'))
         foreach ($dir in @($script:WorkspaceA, $script:WorkspaceB, $script:MarkerlessDir)) {
             [void][System.IO.Directory]::CreateDirectory($dir)
         }
