@@ -1,6 +1,6 @@
 {
   "name": "mcpserver-codex",
-  "version": "1.120.0",
+  "version": "1.121.0",
   "description": "Connect Codex CLI to McpServer for session logging, TODO management, requirements tracking, and subagent transcript capture.",
   "author": {
     "name": "Payton Byrd (The Sharp Ninja)",
@@ -22,28 +22,28 @@
     "sessionStart": [
       {
         "type": "command",
-        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/hooks/scripts/session-start.ps1\u0022",
+        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${PLUGIN_ROOT}/hooks/scripts/session-start.ps1\"",
         "timeout": 15
       }
     ],
     "sessionEnd": [
       {
         "type": "command",
-        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/hooks/scripts/session-end.ps1\u0022",
+        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${PLUGIN_ROOT}/hooks/scripts/session-end.ps1\"",
         "timeout": 10
       }
     ],
     "userPromptSubmit": [
       {
         "type": "command",
-        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.ps1\u0022",
+        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.ps1\"",
         "timeout": 20
       }
     ],
     "taskComplete": [
       {
         "type": "command",
-        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/lib/final-response.ps1\u0022",
+        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${PLUGIN_ROOT}/lib/final-response.ps1\"",
         "timeout": 15,
         "description": "Complete MCP session-log turn with rich fields from Codex JSONL"
       }
@@ -51,7 +51,7 @@
     "subagentComplete": [
       {
         "type": "command",
-        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \u0022${PLUGIN_ROOT}/hooks/scripts/subagent-import.ps1\u0022",
+        "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"${PLUGIN_ROOT}/hooks/scripts/subagent-import.ps1\"",
         "timeout": 30,
         "description": "Import subagent JSONL transcript as first-class MCP session-log turns"
       }
